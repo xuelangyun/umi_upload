@@ -631,6 +631,27 @@ func TestFullSmokeSuite(t *testing.T) {
 	ProbeMax = 0.30
 	defer CloseDB()
 
+	// Production endpoint routing must distinguish AWS S3 V4 from Alibaba OSS.
+	probeCfg := OSSParams{AK: "test-ak", SK: "test-sk", Bucket: "probe-bucket", Parallel: 1}
+	s3ProbeCfg := probeCfg
+	s3ProbeCfg.Endpoint = "http://127.0.0.1:9000"
+	s3Probe, routeErr := NewOSSClientFunc(s3ProbeCfg)
+	if routeErr != nil {
+		t.Fatalf("create S3 endpoint client: %v", routeErr)
+	}
+	if _, ok := s3Probe.(*S3CompatibleClient); !ok {
+		t.Fatalf("custom endpoint must select S3 Signature V4 client, got %T", s3Probe)
+	}
+	aliyunProbeCfg := probeCfg
+	aliyunProbeCfg.Endpoint = "https://oss-cn-hangzhou.aliyuncs.com"
+	aliyunProbe, routeErr := NewOSSClientFunc(aliyunProbeCfg)
+	if routeErr != nil {
+		t.Fatalf("create Alibaba OSS endpoint client: %v", routeErr)
+	}
+	if _, ok := aliyunProbe.(*AliyunOSSClient); !ok {
+		t.Fatalf("Alibaba OSS endpoint must select Aliyun SDK client, got %T", aliyunProbe)
+	}
+
 	mockOSS := newMockOSSServer()
 	ossSrv := httptest.NewServer(mockOSS)
 	defer ossSrv.Close()
