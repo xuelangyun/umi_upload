@@ -404,6 +404,8 @@ func (m *mockOSSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("ETag", `"etag"`)
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
