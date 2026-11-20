@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const DBVersion = 6
+const DBVersion = 7
 
 const (
 	MultipartThreshold int64 = 10 * 1024 * 1024 // >= 10 MiB uses multipart resumable upload
@@ -50,14 +50,16 @@ var OKStates = map[string]bool{
 }
 
 var SDKDefaults = map[string]string{
-	"endpoint":   "http://10.20.100.10:9000",
-	"ak":         "minioadmin",
-	"sk":         "minioadmin@123",
-	"bucket":     "hw-upload",
-	"bucket_umi": "prt-huawei",
+	"endpoint":     "https://oss-cn-hangzhou.aliyuncs.com",
+	"storage_type": "aliyun",
+	"ak":           "",
+	"sk":           "",
+	"bucket":       "hw-upload",
+	"bucket_umi":   "prt-huawei",
 }
 
 var DefaultSettings = map[string]string{
+	"storage_type": "aliyun",
 	"endpoint":     SDKDefaults["endpoint"],
 	"ak":           SDKDefaults["ak"],
 	"sk":           SDKDefaults["sk"],

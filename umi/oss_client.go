@@ -42,6 +42,7 @@ type OSSClient interface {
 }
 
 type OSSParams struct {
+	StorageType    string // "aliyun" (default) or "s3", selected explicitly by the saved profile
 	Endpoint       string
 	AK             string
 	SK             string
@@ -60,11 +61,12 @@ var (
 // NewOSSClientFunc selects the protocol by endpoint, matching sample/upload_umi_sdk.py:
 // Alibaba Cloud OSS uses the Alibaba OSS SDK; MinIO/S3-compatible endpoints use AWS Signature V4.
 var NewOSSClientFunc = func(p OSSParams) (OSSClient, error) {
-	_, _, isAliyun, _ := parseEndpointInfo(p.Endpoint)
-	if isAliyun {
-		return NewAliyunOSSClient(p)
+	// Never infer the storage protocol from the hostname. Alibaba OSS is the safe default,
+	// including when it is accessed through a custom CNAME or proxy endpoint.
+	if strings.EqualFold(strings.TrimSpace(p.StorageType), "s3") {
+		return NewS3CompatibleClient(p)
 	}
-	return NewS3CompatibleClient(p)
+	return NewAliyunOSSClient(p)
 }
 
 func BuildOSSParams(cfg map[string]string, bucket string) OSSParams {
@@ -85,7 +87,12 @@ func BuildOSSParams(cfg map[string]string, bucket string) OSSParams {
 			netWait = v
 		}
 	}
+	storageType := strings.ToLower(strings.TrimSpace(cfg["storage_type"]))
+	if storageType == "" {
+		storageType = "aliyun"
+	}
 	return OSSParams{
+		StorageType:    storageType,
 		Endpoint:       strings.TrimSpace(cfg["endpoint"]),
 		AK:             strings.TrimSpace(cfg["ak"]),
 		SK:             strings.TrimSpace(cfg["sk"]),
