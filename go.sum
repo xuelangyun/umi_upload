@@ -1,0 +1,14 @@
+github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.1 h1:tpKbQ1WOW3Lp7KobDrEyGL2hFwtIX+WHfXhvI3dIwNw=
+github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.1/go.mod h1:FTzydeQVmR24FI0D6XWUOMKckjXehM/jgMn1xC+DA9M=
+github.com/golang/sys v0.46.0 h1:px8gtJ1+5g9ys4K1opftlp4eTu5eKTSPareodkWf8vc=
+github.com/golang/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+github.com/golang/text v0.22.0 h1:fvzO/7hS6y1t51RpkDUTUuxpAdR+cAyBbrWLcUhHgyI=
+github.com/golang/text v0.22.0/go.mod h1:YRoo4H8PVmsu+E3Ou7cqLVH8oXWIHVoX0jqUWALQhfY=
+github.com/golang/time v0.10.0 h1:6O5iMEWv8U6TO7Za6tqWgOj0J7QgqpQB1Np+Yzoa/dg=
+github.com/golang/time v0.10.0/go.mod h1:3BpzKBy/shNhVucY/MWOyx10tF3SFh9QdLuxbVysPQM=
+github.com/ncruces/go-sqlite3 v0.37.0 h1:Ps3EH70hhznZ+qkWIrTUlbTRlEv3dGTSQ/LOXlJxpaM=
+github.com/ncruces/go-sqlite3 v0.37.0/go.mod h1:GASdtn4/ABuWBpm283DX4XJymxoVdVqKYpIDEDjqcV0=
+github.com/ncruces/go-sqlite3-wasm/v6 v6.5.35401 h1:GM27MxQNSRvqi44IYsZANqQKGonIRjUcPojI67RJfq4=
+github.com/ncruces/go-sqlite3-wasm/v6 v6.5.35401/go.mod h1:zeroyGPjT3/xj22bhcPdlFLSYugMoi74v+aISTwWrtM=
+github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt7M=
+github.com/ncruces/julianday v1.0.0/go.mod h1:Dusn2KvZrrovOMJuOt0TNXL6tB7U2E8kvza5fFc9G7g=

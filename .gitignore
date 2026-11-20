@@ -1,0 +1,17 @@
+# Runtime database & resumable upload checkpoints
+umi_web.db
+umi_web.db-wal
+umi_web.db-shm
+umi_ckpt/
+*.db
+*.db-wal
+*.db-shm
+
+# Build & release artifacts (packaged automatically by CI Release)
+/umi_upload
+/umi_upload.exe
+/dist/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

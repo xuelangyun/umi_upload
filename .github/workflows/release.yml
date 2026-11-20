@@ -1,0 +1,83 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Tests
+        run: go test -count=1 -race ./...
+
+      - name: Package Windows Release
+        run: go run scripts/package_release.go -out dist
+
+      - name: Upload Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi_upload-windows-amd64
+          path: |
+            dist/umi_upload.exe
+            dist/umi_upload-windows-amd64.zip
+            dist/SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REL_TAG="${GITHUB_REF_NAME}"
+            REL_TITLE="UMI 数据中心 ${REL_TAG}"
+            gh release view "${REL_TAG}" >/dev/null 2>&1 || \
+              gh release create "${REL_TAG}" --title "${REL_TITLE}" --generate-notes
+            gh release upload "${REL_TAG}" \
+              dist/umi_upload.exe \
+              dist/umi_upload-windows-amd64.zip \
+              dist/SHA256SUMS.txt \
+              --clobber
+          else
+            REL_TAG="latest"
+            SHORT_SHA="${GITHUB_SHA::8}"
+            REL_TITLE="UMI 数据中心 (main-${SHORT_SHA})"
+            NOTES_FILE="$(mktemp)"
+            {
+              echo "自动构建自 \`main\` 分支提交 \`${SHORT_SHA}\`。"
+              echo ""
+              echo "### SHA-256"
+              echo '```text'
+              cat dist/SHA256SUMS.txt
+              echo '```'
+            } > "${NOTES_FILE}"
+            if gh release view "${REL_TAG}" >/dev/null 2>&1; then
+              gh release edit "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
+            else
+              gh release create "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
+            fi
+            gh release upload "${REL_TAG}" \
+              dist/umi_upload.exe \
+              dist/umi_upload-windows-amd64.zip \
+              dist/SHA256SUMS.txt \
+              --clobber
+          fi
