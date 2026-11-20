@@ -1,6 +1,6 @@
 # UMI 数据中心（Go 单文件版）
 
-基于 Go 重构的 UMI 采集数据管理与上传中心。存储类型由命名配置显式选择，默认 **阿里云 OSS** 使用官方 `github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss` SDK v2；只有手动选择 MinIO / S3 时才使用 `minio-go/v7`。多个配置可独立保存和切换。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到 Windows 机器即可直接双击启动。
+基于 Go 重构的 UMI 采集数据管理与上传中心。存储类型由命名配置显式选择，默认 **阿里云 OSS** 使用官方 `github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss` SDK v2；只有手动选择 MinIO / S3 时才使用 `minio-go/v7`。多个配置可独立保存和切换。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到 Windows 机器即可直接双击启动；EXE 内嵌专用云存储上传图标，不使用 Go 默认图标。
 
 ---
 
@@ -14,6 +14,10 @@
    ```bat
    umi_upload.exe --port 8765 --host 127.0.0.1 --db umi_web.db --no-browser
    ```
+
+### Windows EXE 图标
+
+图标源文件位于 `winres/umi_upload_icon.png`，资源定义位于 `winres/winres.json`。执行 `go run scripts/package_release.go -out dist` 时，打包脚本会先调用固定版本的 `go-winres v0.3.3` 生成 Windows amd64 资源对象，再编译 EXE 并自动清理临时资源文件。
 
 ---
 
