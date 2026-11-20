@@ -11,6 +11,7 @@ replace (
 require (
 	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.1
 	github.com/ncruces/go-sqlite3 v0.37.0
+	github.com/minio/minio-go/v7 v7.4.1
 	golang.org/x/text v0.43.0
 )
 
