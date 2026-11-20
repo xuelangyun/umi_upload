@@ -116,6 +116,26 @@ func resolveVersionFromEnv() string {
 }
 
 func buildWindowsExe(outPath, ver string) error {
+	// Generate a Windows PE resource object so the EXE receives the app icon.
+	// The generated .syso is architecture-scoped and removed after this build.
+	resourcePath := "rsrc_windows_amd64.syso"
+	_ = os.Remove(resourcePath)
+	resourceCmd := exec.Command(
+		"go", "run", "github.com/tc-hib/go-winres@v0.3.3", "make",
+		"--arch", "amd64", "--in", "winres/winres.json", "--out", "rsrc",
+	)
+	resourceCmd.Stdout = os.Stdout
+	resourceCmd.Stderr = os.Stderr
+	if err := resourceCmd.Run(); err != nil {
+		_ = os.Remove(resourcePath)
+		return fmt.Errorf("generate Windows icon resource: %w", err)
+	}
+	if st, err := os.Stat(resourcePath); err != nil || st.Size() == 0 {
+		_ = os.Remove(resourcePath)
+		return fmt.Errorf("generated Windows icon resource %s is missing or empty", resourcePath)
+	}
+	defer os.Remove(resourcePath)
+
 	fmt.Printf("[BUILD] Cross-compiling %s (version=%s)...\n", outPath, ver)
 	ldflags := fmt.Sprintf("-s -w -X main.Version=%s", ver)
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", outPath, ".")
