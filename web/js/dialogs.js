@@ -34,7 +34,7 @@ async function removeRoot(p) {
 }
 
 /* ---- OSS 配置 ---- */
-const CFG_FIELDS = ['endpoint', 'bucket', 'bucket_umi', 'ak', 'sk', 'ds_jobs', 'jobs', 'parallel', 'wan', 'net_wait'];
+const CFG_FIELDS = ['storage_type', 'endpoint', 'bucket', 'bucket_umi', 'ak', 'sk', 'ds_jobs', 'jobs', 'parallel', 'wan', 'net_wait'];
 /* 多出口并发：按出口数给建议，并估算当前设置能有多少条并发连接（公式在后端 umi/nettune.py，页面不重复定义） */
 async function refreshNet() {
   const q = new URLSearchParams({wan: $('c_wan').value || 1, ds_jobs: $('c_ds_jobs').value || 2, parallel: $('c_parallel').value || 4});
@@ -49,18 +49,58 @@ function applyNet() {
   $('cmsg').textContent = '已填入建议值，点「保存」生效'; $('cmsg').style.color = '';
 }
 ['c_wan', 'c_ds_jobs', 'c_parallel'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(S.netT); S.netT = setTimeout(refreshNet, 300); }));
-async function openConfig() {
-  const c = await (await fetch('/api/config')).json();
+async function reloadConfigForm() {
+  const [cr, pr] = await Promise.all([fetch('/api/config'), fetch('/api/config/profiles')]);
+  const c = await cr.json(), p = await pr.json();
   for (const k of CFG_FIELDS) if (k !== 'sk') $('c_' + k).value = c[k] || '';
-  $('c_sk').value = ''; $('c_sk').placeholder = c.has_sk ? '已保存（留空不修改）' : '请输入'; $('cmsg').textContent = ''; openModal('mc'); refreshNet();
+  $('c_sk').value = ''; $('c_sk').placeholder = c.has_sk ? '已保存（留空不修改）' : '请输入';
+  $('c_profile_select').innerHTML = (p.profiles || []).map(x =>
+    `<option value="${esc(x.id)}">${esc(x.name)}${x.active ? '（当前生效）' : ''}</option>`).join('');
+  $('c_profile_select').value = p.active_profile_id || '';
+  $('cmsg').textContent = ''; $('cmsg').style.color = '';
+  return c;
+}
+async function openConfig() {
+  await reloadConfigForm();
+  openModal('mc'); refreshNet();
+}
+function configFormValues() {
+  const b = {}; for (const k of CFG_FIELDS) b[k] = $('c_' + k).value;
+  return b;
 }
 async function saveConfig(test) {
-  const b = {}; for (const k of CFG_FIELDS) b[k] = $('c_' + k).value;
-  const sv = await api('/api/config', b);
-  if (!sv.ok) { $('cmsg').textContent = '未保存：' + (sv.error || '失败'); $('cmsg').style.color = 'var(--bad)'; return; }          // 校验未通过（如并发数不是数字）
-  $('cmsg').textContent = '已保存'; $('cmsg').style.color = '';
-  if (test) { $('cmsg').textContent = '测试中…'; const r = await api('/api/config/test', {}); $('cmsg').textContent = r.msg; $('cmsg').style.color = r.ok ? 'var(--ok)' : 'var(--bad)'; }
+  const sv = await api('/api/config', configFormValues());
+  if (!sv.ok) { $('cmsg').textContent = '未保存：' + (sv.error || '失败'); $('cmsg').style.color = 'var(--bad)'; return; }
+  $('cmsg').textContent = '当前配置已保存'; $('cmsg').style.color = '';
+  await reloadConfigForm();
+  if (test) { $('cmsg').textContent = '测试当前配置…'; const r = await api('/api/config/test', {}); $('cmsg').textContent = r.msg; $('cmsg').style.color = r.ok ? 'var(--ok)' : 'var(--bad)'; }
   poll();
+}
+async function switchConfigProfile() {
+  const id = $('c_profile_select').value;
+  if (!id) return toast('没有可切换的配置');
+  const r = await api('/api/config/profiles', {action: 'activate', id});
+  if (!r.ok) return;
+  await reloadConfigForm(); refreshNet(); poll();
+  toast('已切换配置');
+}
+async function saveConfigAsProfile() {
+  const name = $('c_profile_name').value.trim();
+  if (!name) return toast('请输入新配置名称');
+  const r = await api('/api/config/profiles', {action: 'create', name, config: configFormValues()});
+  if (!r.ok) return;
+  $('c_profile_name').value = '';
+  await reloadConfigForm(); refreshNet(); poll();
+  toast('已另存为并切换到新配置');
+}
+async function deleteConfigProfile() {
+  const id = $('c_profile_select').value;
+  const name = $('c_profile_select').selectedOptions[0]?.textContent || '所选配置';
+  if (!id || !confirm(`确定删除配置“${name}”吗？不会删除 OSS 云端数据。`)) return;
+  const r = await api('/api/config/profiles', {action: 'delete', id});
+  if (!r.ok) return;
+  await reloadConfigForm(); refreshNet(); poll();
+  toast('配置已删除');
 }
 
 /* ---- 退出服务（等同于关闭 cmd 窗口） ---- */

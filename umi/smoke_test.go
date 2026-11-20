@@ -632,8 +632,10 @@ func TestFullSmokeSuite(t *testing.T) {
 	defer CloseDB()
 
 	// Production endpoint routing must distinguish AWS S3 V4 from Alibaba OSS.
-	probeCfg := OSSParams{AK: "test-ak", SK: "test-sk", Bucket: "probe-bucket", Parallel: 1}
+	probeCfg := OSSParams{StorageType: "aliyun", AK: "test-ak", SK: "test-sk", Bucket: "probe-bucket", Parallel: 1}
+	// Explicit S3 selection uses AWS V4 even when the endpoint is a private IP.
 	s3ProbeCfg := probeCfg
+	s3ProbeCfg.StorageType = "s3"
 	s3ProbeCfg.Endpoint = "http://127.0.0.1:9000"
 	s3Probe, routeErr := NewOSSClientFunc(s3ProbeCfg)
 	if routeErr != nil {
@@ -650,6 +652,16 @@ func TestFullSmokeSuite(t *testing.T) {
 	}
 	if _, ok := aliyunProbe.(*AliyunOSSClient); !ok {
 		t.Fatalf("Alibaba OSS endpoint must select Aliyun SDK client, got %T", aliyunProbe)
+	}
+	// An Aliyun custom CNAME must remain on the Alibaba SDK; protocol is not inferred from the hostname.
+	cnameCfg := probeCfg
+	cnameCfg.Endpoint = "https://oss-cname.example.com"
+	cnameProbe, routeErr := NewOSSClientFunc(cnameCfg)
+	if routeErr != nil {
+		t.Fatalf("create Aliyun CNAME client: %v", routeErr)
+	}
+	if _, ok := cnameProbe.(*AliyunOSSClient); !ok {
+		t.Fatalf("Aliyun custom CNAME must select Aliyun SDK, got %T", cnameProbe)
 	}
 
 	mockOSS := newMockOSSServer()
@@ -689,8 +701,8 @@ func TestFullSmokeSuite(t *testing.T) {
 	var uv int
 	_ = db.QueryRow("PRAGMA journal_mode").Scan(&jm)
 	_ = db.QueryRow("PRAGMA user_version").Scan(&uv)
-	if strings.ToLower(jm) != "wal" || uv != 6 {
-		t.Fatalf("expected WAL + user_version=6, got %s / %d", jm, uv)
+	if strings.ToLower(jm) != "wal" || uv != 7 {
+		t.Fatalf("expected WAL + user_version=7, got %s / %d", jm, uv)
 	}
 
 	// Test v4 -> v6 migration preserving uploads & settings and backfilling cap_date & room

@@ -1,6 +1,6 @@
 # UMI 数据中心（Go 单文件版）
 
-基于 Go 重构的 UMI 采集数据管理与上传中心。上传端点自动选择协议：**阿里云 OSS** 使用官方 `alibabacloud-oss-go-sdk-v2`；**MinIO / S3 兼容存储**使用 `minio-go/v7` 与 AWS Signature V4（path-style）。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到 Windows 机器即可直接双击启动。
+基于 Go 重构的 UMI 采集数据管理与上传中心。存储类型由命名配置显式选择，默认 **阿里云 OSS** 使用官方 `github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss` SDK v2；只有手动选择 MinIO / S3 时才使用 `minio-go/v7`。多个配置可独立保存和切换。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到 Windows 机器即可直接双击启动。
 
 ---
 
@@ -19,14 +19,16 @@
 
 ## 二、Go 版与 sample 的功能对应
 
-1. **存储协议按 Endpoint 自动选择**
-   - 阿里云 `*.aliyuncs.com`：使用阿里云官方 OSS Go SDK v2；
-   - 自建 MinIO / S3 兼容端点：使用 MinIO Go SDK v7，AWS Signature V4 + path-style，和 sample Python 中的 boto3 S3 V4 分支保持一致；
-   - 不再把自建 MinIO 错误地按阿里云 OSS Signature V1 签名。
+- **多套存储配置**：支持命名保存、切换、另存为和删除。每套配置独立保存存储类型、Endpoint、AK/SK、Bucket 和并发参数；默认使用阿里云 OSS Go SDK v2。
+- **旧配置迁移**：升级时把旧版 `settings` 自动迁移为“默认配置”，保留原 Endpoint、AK/SK、Bucket 和并发参数；旧版本原有阿里云 SDK 调用方式不变。
+
+1. **存储协议由配置显式选择**
+   - 默认及旧配置迁移后均使用阿里云 OSS Go SDK v2（`github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss`），不依据主机名猜测，阿里云自定义 CNAME 也不会被误判；
+   - 只有手动选择 MinIO / S3 时才使用 MinIO Go SDK v7，AWS Signature V4 + path-style。
 2. **上传策略映射**
    - Go 版支持 **逐文件夹（`folder`）**、**逐分片（`slice`，后台预哈希 + 每目录远端清单核对）**、**流水线（`pipeline`，整会话连续上传）**；
    - sample 的 `ossutil` 外部进程引擎已由纯 Go SDK 上传路径替代，不再要求用户安装 `ossutil.exe`；原 `ossutil slice/session` 分别映射为 Go 版 `slice/pipeline`，但不再执行 ossutil 命令行。
-   - 阿里云 OSS SDK 方式支持 SDK checkpoint；MinIO/S3 方式支持并发 multipart 和断网后重试，当前失败的单个大文件可能从头重新上传；已完成文件在数据集重试时会跳过。
+   - 阿里云 OSS SDK v2 保留原有 SDK checkpoint、分片并发、网络恢复及原有 API 调用；MinIO/S3 方式支持并发 multipart 和断网后重试，当前失败的单个大文件可能从头重新上传；已完成文件在数据集重试时会跳过。
 3. **最少依赖（`CGO_ENABLED=0` 纯 Go 静态编译）**
    - 核心依赖：
      - `github.com/aliyun/alibabacloud-oss-go-sdk-v2`（阿里云 OSS）

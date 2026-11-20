@@ -155,9 +155,10 @@ func DeleteConfigProfile(id string) error {
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM config_profiles").Scan(&count); err != nil { return err }
 	if count <= 1 { return errors.New("至少保留一套配置，不能删除最后一套") }
+	activeID := ActiveConfigProfileID()
 	tx, err := db.Begin()
 	if err != nil { return err }
-	if ActiveConfigProfileID() == id {
+	if activeID == id {
 		var nextID, data string
 		if err := tx.QueryRow("SELECT id,config_json FROM config_profiles WHERE id<>? ORDER BY created_at,id LIMIT 1", id).Scan(&nextID, &data); err != nil { _ = tx.Rollback(); return errors.New("没有可切换的备用配置") }
 		var cfg map[string]string

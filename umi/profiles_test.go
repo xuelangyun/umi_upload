@@ -22,7 +22,9 @@ func TestConfigProfilesCreateSwitchDelete(t *testing.T) {
 	if GetCfg()["storage_type"] != "s3" { t.Fatal("new profile should be active") }
 	if err := ActivateConfigProfile(defaultID); err != nil { t.Fatal(err) }
 	if GetCfg()["storage_type"] != "aliyun" { t.Fatal("switch should restore Alibaba profile") }
+	if err := ActivateConfigProfile(id); err != nil { t.Fatal(err) }
 	if err := DeleteConfigProfile(id); err != nil { t.Fatal(err) }
+	if ActiveConfigProfileID() != defaultID || GetCfg()["storage_type"] != "aliyun" { t.Fatal("deleting active profile should switch back to remaining profile") }
 	if len(ListConfigProfiles()["profiles"].([]map[string]any)) != 1 { t.Fatal("expected one remaining profile") }
 }
 

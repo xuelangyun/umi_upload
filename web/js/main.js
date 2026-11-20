@@ -2,7 +2,7 @@
    新增一个按钮：HTML 里写 data-act="名字"，在下面 ACT 表里加对应函数。 */
 const ACT = {
   cfg: el => setCfg({[el.dataset.k]: el.dataset.v}),
-  openConfig, saveConfig: el => saveConfig(!!el.dataset.test), openBrowse, addRoots, openProblems, openGroups, shutdown, applyNet, setFmt, openFolder, openMove, doMove, openVideo, stepVideo, closeVideo, videoMove, videoFolder,
+  openConfig, saveConfig: el => saveConfig(!!el.dataset.test), switchConfigProfile, saveConfigAsProfile, deleteConfigProfile, openBrowse, addRoots, openProblems, openGroups, shutdown, applyNet, setFmt, openFolder, openMove, doMove, openVideo, stepVideo, closeVideo, videoMove, videoFolder,
   closeModal: el => closeModal(el.dataset.m),
   enter: el => browse(el.dataset.p),
   rmRoot: el => removeRoot(el.dataset.r),
