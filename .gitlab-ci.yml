@@ -1,0 +1,64 @@
+image: golang:1.26
+
+variables:
+  GOPROXY: "https://goproxy.cn,https://proxy.golang.org,direct"
+  GOPATH: "$CI_PROJECT_DIR/.go"
+  CGO_ENABLED: "0"
+
+workflow:
+  rules:
+    # 跳过主分支自动发版产生的 release-* 标签，避免重复触发流水线
+    - if: '$CI_COMMIT_TAG =~ /^release-/'
+      when: never
+    # 推送正式版本标签（如 v1.0.0）时触发测试与正式 Release
+    - if: '$CI_COMMIT_TAG'
+    # 合并请求（MR）触发测试与构建产物校验
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # 合并/推送到默认主分支（main / master）或手动触发时自动打包并发布 Release
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+cache:
+  key: "go-mod-v1"
+  paths:
+    - .go/pkg/mod/
+
+stages:
+  - test
+  - release
+
+unit_test:
+  stage: test
+  script:
+    - go version
+    - go test -count=1 ./...
+
+package_check:
+  stage: release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - go run scripts/package_release.go -out dist
+  artifacts:
+    name: "umi_upload-mr-$CI_COMMIT_SHORT_SHA"
+    expire_in: 7 days
+    paths:
+      - dist/umi_upload.exe
+      - dist/umi_upload-windows-amd64.zip
+      - dist/SHA256SUMS.txt
+
+build_and_release:
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  script:
+    - go run scripts/package_release.go -out dist -gitlab-publish
+  artifacts:
+    name: "umi_upload-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
+    expire_in: 90 days
+    paths:
+      - dist/umi_upload.exe
+      - dist/umi_upload-windows-amd64.zip
+      - dist/SHA256SUMS.txt
