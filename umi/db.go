@@ -113,7 +113,7 @@ func InitDB() error {
 		return err
 	}
 
-	if ver != 0 && ver != 4 && ver != 5 && ver != DBVersion {
+	if ver != 0 && ver != 4 && ver != 5 && ver != 6 && ver != DBVersion {
 		rows, qerr := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'")
 		if qerr == nil {
 			type obj struct{ name, typ string }
@@ -144,6 +144,9 @@ func InitDB() error {
 	}
 
 	if _, err := db.Exec(schemaSQL); err != nil {
+		return err
+	}
+	if err := ensureInitialConfigProfile(db); err != nil {
 		return err
 	}
 
@@ -180,7 +183,7 @@ func GetCfg() map[string]string {
 			defer rows.Close()
 			for rows.Next() {
 				var k, v string
-				if rows.Scan(&k, &v) == nil {
+				if rows.Scan(&k, &v) == nil && cfgAllowedKeys[k] {
 					c[k] = v
 				}
 			}

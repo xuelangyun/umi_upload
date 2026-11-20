@@ -42,12 +42,14 @@ var cfgNumBounds = map[string][2]int{
 }
 
 var cfgEnums = map[string][]string{
+	"storage_type": {"aliyun", "s3"},
 	"method":       {"sdk", "ossutil"},
 	"order":        {"folder", "slice", "pipeline"},
 	"ossutil_unit": {"slice", "session"},
 }
 
 var cfgAllowedKeys = map[string]bool{
+	"storage_type": true,
 	"endpoint":     true,
 	"bucket":       true,
 	"bucket_umi":   true,
@@ -771,6 +773,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 			out["has_sk"] = hasSK
 			out["buckets"] = BucketsMap(c)
 			out["formats"] = FormatsLabelMap()
+			out["active_profile_id"] = ActiveConfigProfileID()
 			writeJSON(w, http.StatusOK, out)
 
 		case http.MethodPost:
@@ -779,70 +782,103 @@ func NewHandler(webFS fs.FS) http.Handler {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 				return
 			}
-			clean := map[string]string{}
-			for k, v := range body {
-				if cfgAllowedKeys[k] && v != nil {
-					clean[k] = strings.TrimSpace(fmt.Sprint(v))
-				}
-			}
-			for k, v := range clean {
-				if msg := cfgCheck(k, v); msg != "" {
-					writeJSON(w, http.StatusBadRequest, map[string]any{"error": msg})
-					return
-				}
-			}
-
 			cur := GetCfg()
-			bucketChanging := false
-			for _, bk := range []string{"bucket", "bucket_umi"} {
-				if nv, ok := clean[bk]; ok {
-					eff := nv
-					if eff == "" {
-						eff = SDKDefaults[bk]
-					}
-					if eff != cur[bk] {
-						bucketChanging = true
-					}
-				}
+			merged, validationError := mergeConfigValues(cur, body)
+			if validationError != "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError})
+				return
 			}
-			if bucketChanging {
+			remoteChanged := merged["storage_type"] != cur["storage_type"] ||
+				merged["endpoint"] != cur["endpoint"] ||
+				merged["bucket"] != cur["bucket"] ||
+				merged["bucket_umi"] != cur["bucket_umi"]
+			if remoteChanged {
 				PL.Lock()
 				busy := Scan.Running || AnyJobRunningLocked()
 				PL.Unlock()
 				if busy {
-					writeJSON(w, http.StatusConflict, map[string]any{"error": "扫描/上传/校验进行中，暂时不能更换 Bucket"})
+					writeJSON(w, http.StatusConflict, map[string]any{"error": "扫描/上传/校验进行中，暂时不能更换存储类型、Endpoint 或 Bucket"})
 					return
 				}
 			}
-
-			for k, v := range clean {
-				if k == "sk" && v == "" {
-					continue
-				}
-				_, isNum := cfgNumBounds[k]
-				_, isEnum := cfgEnums[k]
-				if v == "" && (isNum || isEnum || k == "bucket" || k == "bucket_umi") {
-					_ = DeleteSetting(k)
-				} else {
-					_ = SetSetting(k, v)
-				}
-			}
-			// If legacy ossutil_unit was explicitly passed, sync order so Go SDK executes the matching strategy.
-			if unit, ok := clean["ossutil_unit"]; ok && unit != "" {
-				if _, hasOrder := clean["order"]; !hasOrder {
-					if unit == "session" {
-						_ = SetSetting("order", "pipeline")
-					} else {
-						_ = SetSetting("order", "slice")
-					}
-				}
+			if err := SaveActiveConfigProfile(merged); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "保存配置失败: " + err.Error()})
+				return
 			}
 			c := ApplyCfg()
 			writeJSON(w, http.StatusOK, map[string]any{
-				"ok":      true,
-				"buckets": BucketsMap(c),
+				"ok": true, "buckets": BucketsMap(c), "active_profile_id": ActiveConfigProfileID(),
 			})
 
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
+		}
+	})
+
+	mux.HandleFunc("/api/config/profiles", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, ListConfigProfiles())
+		case http.MethodPost:
+			body, err := readBodyMap(r)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+				return
+			}
+			action := strOr(body["action"], "")
+			id := strings.TrimSpace(strOr(body["id"], ""))
+			PL.Lock()
+			busy := Scan.Running || AnyJobRunningLocked()
+			PL.Unlock()
+			switch action {
+			case "create":
+				if busy {
+					writeJSON(w, http.StatusConflict, map[string]any{"error": "扫描/上传/校验进行中，暂时不能另存并切换配置"})
+					return
+				}
+				name := strings.TrimSpace(strOr(body["name"], ""))
+				raw, ok := body["config"].(map[string]any)
+				if !ok {
+					writeJSON(w, http.StatusBadRequest, map[string]any{"error": "缺少配置内容"})
+					return
+				}
+				cfg, validationError := mergeConfigValues(GetCfg(), raw)
+				if validationError != "" {
+					writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError})
+					return
+				}
+				newID, err := CreateConfigProfile(name, cfg)
+				if err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+					return
+				}
+				_ = ApplyCfg()
+				writeJSON(w, http.StatusOK, map[string]any{"ok": true, "active_profile_id": newID, "profiles": ListConfigProfiles()["profiles"]})
+			case "activate":
+				if busy {
+					writeJSON(w, http.StatusConflict, map[string]any{"error": "扫描/上传/校验进行中，暂时不能切换配置"})
+					return
+				}
+				if err := ActivateConfigProfile(id); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+					return
+				}
+				_ = ApplyCfg()
+				writeJSON(w, http.StatusOK, map[string]any{"ok": true, "active_profile_id": id, "profiles": ListConfigProfiles()["profiles"]})
+			case "delete":
+				if busy && id == ActiveConfigProfileID() {
+					writeJSON(w, http.StatusConflict, map[string]any{"error": "扫描/上传/校验进行中，不能删除当前生效配置"})
+					return
+				}
+				if err := DeleteConfigProfile(id); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+					return
+				}
+				_ = ApplyCfg()
+				writeJSON(w, http.StatusOK, ListConfigProfiles())
+			default:
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "action 只能是 create / activate / delete"})
+			}
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 		}
@@ -917,7 +953,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 		if !allOK {
 			prefix = "有桶连接失败"
 		}
-		msg := fmt.Sprintf("%s（阿里云 Go SDK，%s）：%s", prefix, c["endpoint"], strings.Join(out, "；"))
+		provider := "阿里云 OSS Go SDK v2"
+		if c["storage_type"] == "s3" {
+			provider = "MinIO/S3（AWS Signature V4）"
+		}
+		msg := fmt.Sprintf("%s（%s，%s）：%s", prefix, provider, c["endpoint"], strings.Join(out, "；"))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": allOK, "msg": msg})
 	})
 

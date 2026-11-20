@@ -42,6 +42,7 @@ type OSSClient interface {
 }
 
 type OSSParams struct {
+	StorageType    string // "aliyun" (default) or "s3", selected explicitly by the saved profile
 	Endpoint       string
 	AK             string
 	SK             string
@@ -57,8 +58,14 @@ var (
 	ProbeMax = 60.0
 )
 
-// NewOSSClientFunc creates an OSSClient for a specific bucket; swappable in unit/smoke tests.
+// NewOSSClientFunc selects the protocol by endpoint, matching sample/upload_umi_sdk.py:
+// Alibaba Cloud OSS uses the Alibaba OSS SDK; MinIO/S3-compatible endpoints use AWS Signature V4.
 var NewOSSClientFunc = func(p OSSParams) (OSSClient, error) {
+	// Never infer the storage protocol from the hostname. Alibaba OSS is the safe default,
+	// including when it is accessed through a custom CNAME or proxy endpoint.
+	if strings.EqualFold(strings.TrimSpace(p.StorageType), "s3") {
+		return NewS3CompatibleClient(p)
+	}
 	return NewAliyunOSSClient(p)
 }
 
@@ -80,7 +87,12 @@ func BuildOSSParams(cfg map[string]string, bucket string) OSSParams {
 			netWait = v
 		}
 	}
+	storageType := strings.ToLower(strings.TrimSpace(cfg["storage_type"]))
+	if storageType == "" {
+		storageType = "aliyun"
+	}
 	return OSSParams{
+		StorageType:    storageType,
 		Endpoint:       strings.TrimSpace(cfg["endpoint"]),
 		AK:             strings.TrimSpace(cfg["ak"]),
 		SK:             strings.TrimSpace(cfg["sk"]),
@@ -115,8 +127,8 @@ func parseEndpointInfo(rawEndpoint string) (normalizedEndpoint, region string, i
 	if m := reAliyunRegion2.FindStringSubmatch(host); m != nil {
 		return ep, m[1], true, false
 	}
-	// Custom / MinIO / IP / localhost endpoints use path-style + V1 signature compatibility.
-	return ep, "cn-hangzhou", false, true
+	// Custom / MinIO / IP / localhost endpoints are S3-compatible and must use AWS Signature V4.
+	return ep, "us-east-1", false, true
 }
 
 // AliyunOSSClient implements OSSClient on top of github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss.
@@ -149,6 +161,8 @@ func NewAliyunOSSClient(p OSSParams) (*AliyunOSSClient, error) {
 			WithConnectTimeout(8 * time.Second).
 			WithReadWriteTimeout(readWriteTimeout)
 		if !isAliyun {
+			// Retained for direct mock-client tests. Production endpoint selection
+			// routes custom endpoints through NewS3CompatibleClient instead.
 			cfg = cfg.WithSignatureVersion(oss.SignatureVersionV1)
 		}
 		return cfg
@@ -196,6 +210,10 @@ func isNoSuchKey(err error) bool {
 			return true
 		}
 	}
+	var s3Err *S3APIError
+	if errors.As(err, &s3Err) && (s3Err.StatusCode == http.StatusNotFound || s3Err.Code == "NoSuchKey") {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "NoSuchKey") || strings.Contains(msg, "StatusCode: 404") || strings.Contains(msg, "status code 404")
 }
@@ -215,6 +233,10 @@ func LooksNetwork(err error) bool {
 	var svcErr *oss.ServiceError
 	if errors.As(err, &svcErr) {
 		return svcErr.StatusCode == 408 || svcErr.StatusCode == 429 || svcErr.StatusCode >= 500
+	}
+	var s3Err *S3APIError
+	if errors.As(err, &s3Err) {
+		return s3Err.StatusCode == 408 || s3Err.StatusCode == 429 || s3Err.StatusCode >= 500
 	}
 	s := strings.ToLower(err.Error())
 	for _, kw := range []string{
@@ -417,96 +439,78 @@ func (c *AliyunOSSClient) ListObjects(uriPrefix string) ([]RemoteObj, error) {
 }
 
 func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir string, onDelta func(int64)) error {
-	if size < MultipartThreshold {
-		var reported int64
-		err := c.runWithRetry(func() error {
-			if reported > 0 && onDelta != nil {
-				onDelta(-reported)
-				reported = 0
-			}
-			f, oerr := os.Open(localPath)
-			if oerr != nil {
-				return oerr
-			}
-			defer f.Close()
-			req := &oss.PutObjectRequest{
-				Bucket: oss.Ptr(c.params.Bucket),
-				Key:    oss.Ptr(key),
-				Body:   f,
-				ProgressFn: func(inc, transferred, total int64) {
-					if inc > 0 && onDelta != nil {
-						reported += inc
-						onDelta(inc)
-					}
-				},
-			}
-			_, perr := c.client.PutObject(AppCtx, req)
-			return perr
-		})
-		if err != nil {
-			if reported > 0 && onDelta != nil {
-				onDelta(-reported)
-			}
-			return err
-		}
-		if size > reported && onDelta != nil {
-			onDelta(size - reported)
-		}
-		return nil
+	if size < 0 {
+		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
 
-	if ckptDir != "" {
-		_ = os.MkdirAll(ckptDir, 0o700)
-	}
 	parallel := c.params.Parallel
 	if parallel < 1 {
 		parallel = 4
 	}
 
+	// All local files go through the SDK v2 file-path API. Uploader.UploadFile
+	// internally uses PutObject for files smaller than PartSize and multipart
+	// for larger files. Enable persistent checkpoints for multipart-sized files.
+	useCheckpoint := size >= MultipartThreshold && ckptDir != ""
+	if useCheckpoint {
+		if err := os.MkdirAll(ckptDir, 0o700); err != nil {
+			return fmt.Errorf("创建 OSS checkpoint 目录失败: %w", err)
+		}
+	}
+
 	var reported int64
 	var progMu sync.Mutex
-	err := c.runWithRetry(func() error {
+	rollbackProgress := func() {
 		progMu.Lock()
-		if reported > 0 && onDelta != nil {
-			onDelta(-reported)
-			reported = 0
-		}
+		n := reported
+		reported = 0
 		progMu.Unlock()
+		if n > 0 && onDelta != nil {
+			onDelta(-n)
+		}
+	}
+
+	err := c.runWithRetry(func() error {
+		// A retry restarts progress accounting. For multipart uploads the SDK
+		// may resume from checkpoint; the completed bytes will be reported again.
+		rollbackProgress()
 
 		uploader := oss.NewUploader(c.client, func(uo *oss.UploaderOptions) {
 			uo.PartSize = PartSize
 			uo.ParallelNum = parallel
 			uo.LeavePartsOnError = true
-			if ckptDir != "" {
+			if useCheckpoint {
 				uo.EnableCheckpoint = true
 				uo.CheckpointDir = ckptDir
 			}
 		})
+
 		req := &oss.PutObjectRequest{
 			Bucket: oss.Ptr(c.params.Bucket),
 			Key:    oss.Ptr(key),
 			ProgressFn: func(inc, transferred, total int64) {
-				if inc > 0 && onDelta != nil {
-					progMu.Lock()
-					reported += inc
-					progMu.Unlock()
-					onDelta(inc)
+				if inc <= 0 || onDelta == nil {
+					return
 				}
+				progMu.Lock()
+				reported += inc
+				progMu.Unlock()
+				onDelta(inc)
 			},
 		}
-		_, uerr := uploader.UploadFile(AppCtx, req, localPath)
-		return uerr
+
+		// Use Uploader.UploadFile (not UploadFrom): the SDK opens the local
+		// path itself and supports persistent multipart checkpoint recovery.
+		_, uploadErr := uploader.UploadFile(AppCtx, req, localPath)
+		return uploadErr
 	})
 	if err != nil {
-		progMu.Lock()
-		rem := reported
-		reported = 0
-		progMu.Unlock()
-		if rem > 0 && onDelta != nil {
-			onDelta(-rem)
-		}
+		rollbackProgress()
 		return err
 	}
+
+	// SDK v1.6.1 does not emit ProgressFn for its internal single-part path.
+	// Account for small files only after the single PutObject has completed.
 	progMu.Lock()
 	diff := size - reported
 	reported = size

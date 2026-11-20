@@ -37,9 +37,11 @@ type mockOSSServer struct {
 	writeLog    []string                               // "<bucket>/<key>" in exact commit order
 	partUploads int64                                  // total UploadPart calls succeeded
 	putSkips    map[string]int                         // bucket/key -> PutObject count
-	nextUpID    int
-	netMode     string // "" = healthy, "all" = all ops fail 503, "put_after_1" = fail writes & probes after 1 write
-	writesSince int
+	nextUpID       int
+	netMode        string // "" = healthy, "all" = all ops fail 503, "put_after_1" = fail writes & probes after 1 write
+	writesSince    int
+	requireV4      bool
+	sigV4Requests  int
 }
 
 func newMockOSSServer() *mockOSSServer {
@@ -158,12 +160,38 @@ func (m *mockOSSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if m.requireV4 {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=test-ak/") {
+			m.mu.Unlock()
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidRequest</Code><Message>AWS Signature V4 required</Message></Error>`))
+			return
+		}
+		m.sigV4Requests++
+	}
 	m.mu.Unlock()
 
 	if shouldFailNet {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>ServiceUnavailable</Code><Message>simulated network outage</Message></Error>`))
+		return
+	}
+
+	// BucketExists: HEAD /{bucket}
+	if r.Method == http.MethodHead && key == "" {
+		m.mu.Lock()
+		_, exists := m.objects[bucket]
+		m.mu.Unlock()
+		if !exists {
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code></Error>`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -376,6 +404,8 @@ func (m *mockOSSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("ETag", `"etag"`)
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
@@ -601,6 +631,39 @@ func TestFullSmokeSuite(t *testing.T) {
 	ProbeMax = 0.30
 	defer CloseDB()
 
+	// Production endpoint routing must distinguish AWS S3 V4 from Alibaba OSS.
+	probeCfg := OSSParams{StorageType: "aliyun", AK: "test-ak", SK: "test-sk", Bucket: "probe-bucket", Parallel: 1}
+	// Explicit S3 selection uses AWS V4 even when the endpoint is a private IP.
+	s3ProbeCfg := probeCfg
+	s3ProbeCfg.StorageType = "s3"
+	s3ProbeCfg.Endpoint = "http://127.0.0.1:9000"
+	s3Probe, routeErr := NewOSSClientFunc(s3ProbeCfg)
+	if routeErr != nil {
+		t.Fatalf("create S3 endpoint client: %v", routeErr)
+	}
+	if _, ok := s3Probe.(*S3CompatibleClient); !ok {
+		t.Fatalf("custom endpoint must select S3 Signature V4 client, got %T", s3Probe)
+	}
+	aliyunProbeCfg := probeCfg
+	aliyunProbeCfg.Endpoint = "https://oss-cn-hangzhou.aliyuncs.com"
+	aliyunProbe, routeErr := NewOSSClientFunc(aliyunProbeCfg)
+	if routeErr != nil {
+		t.Fatalf("create Alibaba OSS endpoint client: %v", routeErr)
+	}
+	if _, ok := aliyunProbe.(*AliyunOSSClient); !ok {
+		t.Fatalf("Alibaba OSS endpoint must select Aliyun SDK client, got %T", aliyunProbe)
+	}
+	// An Aliyun custom CNAME must remain on the Alibaba SDK; protocol is not inferred from the hostname.
+	cnameCfg := probeCfg
+	cnameCfg.Endpoint = "https://oss-cname.example.com"
+	cnameProbe, routeErr := NewOSSClientFunc(cnameCfg)
+	if routeErr != nil {
+		t.Fatalf("create Aliyun CNAME client: %v", routeErr)
+	}
+	if _, ok := cnameProbe.(*AliyunOSSClient); !ok {
+		t.Fatalf("Aliyun custom CNAME must select Aliyun SDK, got %T", cnameProbe)
+	}
+
 	mockOSS := newMockOSSServer()
 	ossSrv := httptest.NewServer(mockOSS)
 	defer ossSrv.Close()
@@ -638,8 +701,8 @@ func TestFullSmokeSuite(t *testing.T) {
 	var uv int
 	_ = db.QueryRow("PRAGMA journal_mode").Scan(&jm)
 	_ = db.QueryRow("PRAGMA user_version").Scan(&uv)
-	if strings.ToLower(jm) != "wal" || uv != 6 {
-		t.Fatalf("expected WAL + user_version=6, got %s / %d", jm, uv)
+	if strings.ToLower(jm) != "wal" || uv != 7 {
+		t.Fatalf("expected WAL + user_version=7, got %s / %d", jm, uv)
 	}
 
 	// Test v4 -> v6 migration preserving uploads & settings and backfilling cap_date & room
@@ -1301,5 +1364,66 @@ func copyDirRecursive(t *testing.T, src, dst string) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+
+func TestS3CompatibleClientUsesAWSV4AndMultipart(t *testing.T) {
+	mock := newMockOSSServer()
+	mock.objects["test-bucket"] = map[string][]byte{}
+	mock.requireV4 = true
+	srv := httptest.NewServer(mock)
+	defer srv.Close()
+
+	client, err := NewS3CompatibleClient(OSSParams{
+		Endpoint:       srv.URL,
+		AK:             "test-ak",
+		SK:             "test-sk",
+		Bucket:         "test-bucket",
+		Parallel:       2,
+		NetWaitMinutes: 0,
+	})
+	if err != nil {
+		t.Fatalf("create S3 client: %v", err)
+	}
+	if err := client.TestBucket(); err != nil {
+		t.Fatalf("AWS V4 bucket probe failed: %v", err)
+	}
+
+	prefix := "oss://test-bucket/parity/"
+	if err := client.PutObject(prefix+"manifest.json", []byte(`{"version":1}`)); err != nil {
+		t.Fatalf("small S3 object PUT failed: %v", err)
+	}
+	body, found, err := client.ReadObject(prefix + "manifest.json")
+	if err != nil || !found || string(body) != `{"version":1}` {
+		t.Fatalf("S3 read-back mismatch: found=%v body=%q err=%v", found, string(body), err)
+	}
+
+	tmp := t.TempDir()
+	local := filepath.Join(tmp, "large-video.bin")
+	payload := bytes.Repeat([]byte("s3-multipart-v4-"), 700*1024) // > 10 MiB
+	if err := os.WriteFile(local, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.UploadFile(local, "parity/large-video.bin", int64(len(payload)), "", nil); err != nil {
+		t.Fatalf("S3 multipart upload failed: %v", err)
+	}
+	uploaded, ok := mock.getObjectBytes("test-bucket", "parity/large-video.bin")
+	if !ok || !bytes.Equal(uploaded, payload) {
+		t.Fatalf("S3 multipart payload mismatch: found=%v got=%d want=%d", ok, len(uploaded), len(payload))
+	}
+
+	items, err := client.ListObjects(prefix)
+	if err != nil {
+		t.Fatalf("S3 list objects failed: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected manifest + uploaded video in list, got %d: %+v", len(items), items)
+	}
+	mock.mu.Lock()
+	v4Requests := mock.sigV4Requests
+	mock.mu.Unlock()
+	if v4Requests < 6 {
+		t.Fatalf("expected AWS Signature V4 on all S3 requests, observed %d requests", v4Requests)
 	}
 }

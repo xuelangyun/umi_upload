@@ -1,10 +1,19 @@
 -- ============================================================================
--- UMI 数据中心 SQLite 表结构（DB_VERSION=6）
+-- UMI 数据中心 SQLite 表结构（DB_VERSION=7）
 --   * 与原版 umi_web.db 100% 兼容，可直接无缝复用已有数据库
 --   * 数据库使用 WAL 模式：直接关闭 cmd 窗口 / 断电也不会损坏，下次启动自动恢复
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+
+-- Named connection profiles. The active config is mirrored into settings for runtime compatibility.
+CREATE TABLE IF NOT EXISTS config_profiles(
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  config_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS roots(path TEXT PRIMARY KEY);
 

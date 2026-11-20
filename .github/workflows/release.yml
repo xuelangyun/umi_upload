@@ -27,8 +27,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Resolve module graph
+        run: go mod tidy
+
       - name: Run Tests
         run: go test -count=1 -race ./...
+
+      - name: Upload resolved module files
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-go-modules
+          path: |
+            go.mod
+            go.sum
 
       - name: Package Windows Release
         run: go run scripts/package_release.go -out dist
