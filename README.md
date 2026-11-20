@@ -1,6 +1,6 @@
-# UMI 数据中心（阿里云 OSS Go SDK 单文件版）
+# UMI 数据中心（Go 单文件版）
 
-基于 Go 标准库 + **阿里云官方 `alibabacloud-oss-go-sdk-v2`** 重构打包的 UMI 采集数据管理与上传中心。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到任意 Windows 机器即可直接双击启动。
+基于 Go 重构的 UMI 采集数据管理与上传中心。上传端点自动选择协议：**阿里云 OSS** 使用官方 `alibabacloud-oss-go-sdk-v2`；**MinIO / S3 兼容存储**使用 `minio-go/v7` 与 AWS Signature V4（path-style）。已移除外部 `ossutil.exe` 与 Python 运行时依赖，前端静态资源通过 `go:embed` 内嵌至单个可执行文件 `umi_upload.exe`，拷贝到 Windows 机器即可直接双击启动。
 
 ---
 
@@ -17,18 +17,23 @@
 
 ---
 
-## 二、核心变更与特性对齐（功能 100% 保持不变）
+## 二、Go 版与 sample 的功能对应
 
-1. **`ossutil` 完全替换为阿里云官方 Go SDK（`alibabacloud-oss-go-sdk-v2`）**
-   - 大文件（≥ 10 MiB）自动启用 SDK 分片并发上传（`ParallelNum = parallel`）与本地 `.ucp` 断点续传检查点；
-   - 支持 **逐文件夹（`folder`）**、**逐分片（`slice`，后台预哈希 + 每目录远端清单核对）**、**流水线（`pipeline`，整会话无空档连续上传）** 三种上传顺序；
-   - 完整保留 **断网自动等待与恢复（`net_wait`）**：网络抖动/中断时自动循环探测 OSS 连通性，恢复后接着续传并跳过已传文件；即使进程重启，也会通过 `umi_ckpt/` 自动断点续传。
-2. **最少依赖（`CGO_ENABLED=0` 纯 Go 静态编译）**
-   - 直接依赖仅 2 个核心模块：
-     - `github.com/aliyun/alibabacloud-oss-go-sdk-v2`（阿里云官方 OSS Go SDK v2）
+1. **存储协议按 Endpoint 自动选择**
+   - 阿里云 `*.aliyuncs.com`：使用阿里云官方 OSS Go SDK v2；
+   - 自建 MinIO / S3 兼容端点：使用 MinIO Go SDK v7，AWS Signature V4 + path-style，和 sample Python 中的 boto3 S3 V4 分支保持一致；
+   - 不再把自建 MinIO 错误地按阿里云 OSS Signature V1 签名。
+2. **上传策略映射**
+   - Go 版支持 **逐文件夹（`folder`）**、**逐分片（`slice`，后台预哈希 + 每目录远端清单核对）**、**流水线（`pipeline`，整会话连续上传）**；
+   - sample 的 `ossutil` 外部进程引擎已由纯 Go SDK 上传路径替代，不再要求用户安装 `ossutil.exe`；原 `ossutil slice/session` 分别映射为 Go 版 `slice/pipeline`，但不再执行 ossutil 命令行。
+   - 阿里云 OSS SDK 方式支持 SDK checkpoint；MinIO/S3 方式支持并发 multipart 和断网后重试，当前失败的单个大文件可能从头重新上传；已完成文件在数据集重试时会跳过。
+3. **最少依赖（`CGO_ENABLED=0` 纯 Go 静态编译）**
+   - 核心依赖：
+     - `github.com/aliyun/alibabacloud-oss-go-sdk-v2`（阿里云 OSS）
+     - `github.com/minio/minio-go/v7`（MinIO / S3 Signature V4）
      - `github.com/ncruces/go-sqlite3`（零 CGO 纯 Go SQLite 驱动，支持 WAL 并发读写）
    - YAML 解析、4 表联立 `.xlsx` 报表生成、HTTP Range 视频流播放、UTF-16 字典序清单签名均由 Go 标准库直接实现。
-3. **业务规则与防呆红线 100% 保持一致**
+4. **业务规则与防呆红线按 sample 对齐**
    - **双格式共存与分桶隔离**：`ISuit-V3_YYYY-MM-DD-HH-MM-SS`（默认 `hw-upload`）与 `UMI_v3_YYYYMMDD_HHMMSS`（默认 `prt-huawei`）按会话目录名自动识别、分桶隔离；
    - **严格两阶段提交**：全量数据文件上传 + 远端数量/大小核对 → 写入并回读校验 `manifest.json`（与 Python 版 `revision` 逐字节完全一致） → 最后写入并校验 `_READY`；
    - **快速校验 / 深度 SHA-256 校验 / 校验补录**：支持快速核对清单与逐文件下载比对 SHA-256，远端一致但本地无记录时自动单次补录；
