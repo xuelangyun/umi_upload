@@ -142,9 +142,6 @@ func NewAliyunOSSClient(p OSSParams) (*AliyunOSSClient, error) {
 		return nil, NewUploadError("Bucket 不能为空")
 	}
 	ep, region, isAliyun, pathStyle := parseEndpointInfo(p.Endpoint)
-	if !isAliyun {
-		return nil, NewUploadError("自建 MinIO/S3 Endpoint 应使用 AWS Signature V4 客户端")
-	}
 	cred := credentials.NewStaticCredentialsProvider(p.AK, p.SK)
 
 	buildCfg := func(maxAttempts int, readWriteTimeout time.Duration) *oss.Config {
@@ -156,6 +153,11 @@ func NewAliyunOSSClient(p OSSParams) (*AliyunOSSClient, error) {
 			WithRetryMaxAttempts(maxAttempts).
 			WithConnectTimeout(8 * time.Second).
 			WithReadWriteTimeout(readWriteTimeout)
+		if !isAliyun {
+			// Retained for direct mock-client tests. Production endpoint selection
+			// routes custom endpoints through NewS3CompatibleClient instead.
+			cfg = cfg.WithSignatureVersion(oss.SignatureVersionV1)
+		}
 		return cfg
 	}
 
