@@ -1,0 +1,36 @@
+schema_version: 1.1
+package_id: !<tag:yaml.org,2002:str> 9213e613-4b19-4194-8e13-44bfceeb3e30
+issued_at: !<tag:yaml.org,2002:str> 2026-11-17T04:14:45.223575Z
+payload: {project: {id: !<tag:yaml.org,2002:str> fd7b77fc-baae-4345-b50b-251fde019a57, revision: 3, name: !<tag:yaml.org,2002:str> 华为居家采集, priority: !<tag:yaml.org,2002:str> normal, description: !<tag:yaml.org,2002:str> 测试, initiator_id: !<tag:yaml.org,2002:str> 07a7ecc7-e694-4e32-9a15-ff0185db0832, device_type: !<tag:yaml.org,2002:str> 机加工指套版, scene: !<tag:yaml.org,2002:str> 居家场景}, claim: {id: !<tag:yaml.org,2002:str> 0db66122-5991-4e5f-b7ed-b60376e29edd, collector_id: !<tag:yaml.org,2002:str> f2bec9aa-33dc-404f-a785-4a5e19fbc7f2, claimed_at: !<tag:yaml.org,2002:str> 2026-11-17T03:36:00.083123Z}, task: {id: !<tag:yaml.org,2002:str> d430f5fc-01ab-4c33-a812-a62d104a1ae6, revision: 2, title: !<tag:yaml.org,2002:str> 玩具分类收纳-自然光, responsible_id: !<tag:yaml.org,2002:str> 657e2102-4fa3-4ba3-a87f-d2def489e1de, required_duration_seconds: null, start_date: !<tag:yaml.org,2002:str> 2026-11-17, end_date: !<tag:yaml.org,2002:str> 2026-11-17, lighting: !<tag:yaml.org,2002:str> 自然光, city: !<tag:yaml.org,2002:str> 江苏省无锡市, scene_type: !<tag:yaml.org,2002:str> 现代简约风格, scene_location: !<tag:yaml.org,2002:str> 江苏省无锡市张镇家园318幢1802, scene_specification: !<tag:yaml.org,2002:str> 二室一厅一厨一卫, sop: !<tag:yaml.org,2002:str> UMI数采-SOP_V1.0_20260924, duration_seconds: 360}}
+signature: {algorithm: !<tag:yaml.org,2002:str> Ed25519, key_id: !<tag:yaml.org,2002:str> primary, value: !<tag:yaml.org,2002:str> xekdzg1dqXY+P2NgPsyR/HZ0lWfH9EzOoI8Ff0+uPPn7yXm/fLjNXP+3pTc9mC+qFIFC0wHbxzQHstVa4198AQ==}
+device_ID: UMI_v3
+device_SN: prt004
+record_location: 地址
+record_operator: 采集员
+task_ID: fd7b77fc-baae-4345-b50b-251fde019a57_prt004_20261117_130624
+task_name: 华为居家采集
+task_title: 玩具分类收纳-自然光
+selected_task_ID: d430f5fc-01ab-4c33-a812-a62d104a1ae6
+sub_task: []
+project_ID: fd7b77fc-baae-4345-b50b-251fde019a57
+device_version:
+  - device_type: APP
+    release_version: v1.0.0
+  - device_type: 头
+    release_version: v1
+  - device_type: 左手
+    release_version: v3
+  - device_type: 右手
+    release_version: v3
+device_sn:
+  PC: PRT11261104
+  ego: AZEPA6100L9
+  left: 0LU221212111102611016
+  right: 0RU221212111102611002
+TCP:
+  left:
+    max_angle: 334.81
+    min_angle: 36.355
+  right:
+    max_angle: 126.017
+    min_angle: 188.553

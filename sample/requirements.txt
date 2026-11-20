@@ -1,0 +1,5 @@
+flask
+pyyaml
+# 以下按需安装（只有「SDK 方式」才需要；用 ossutil 方式可以都不装）：
+#   boto3   SDK 方式 + MinIO/S3 兼容存储
+#   oss2    SDK 方式 + 阿里云 OSS（Endpoint 含 .aliyuncs.com）

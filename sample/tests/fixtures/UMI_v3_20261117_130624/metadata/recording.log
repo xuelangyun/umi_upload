@@ -1,0 +1,22 @@
+2026-11-17 13:06:24.204 +0800 INFO 录制日志创建：dataset=orbslam3_datasets/UMI_v3_20261117_130624
+2026-11-17 13:06:24.204 +0800 INFO 电池：电量=50% 成功读取过=否（默认值） 最近通信=失败/未读取
+2026-11-17 13:06:24.204 +0800 INFO 相机状态：错误码=0
+2026-11-17 13:06:24.204 +0800 INFO 录制配置：格式=mp4 编码=h265 编码器=vaapi 目标帧率=30 相机掩码=7 手部请求采集帧率=60 手部选帧=joint 手部时间戳=estimate 左手=/dev/v4l/by-path/pci-0000:c6:00.3-usb-0:3.2:1.0-video-index0 右手=/dev/v4l/by-path/pci-0000:c8:00.3-usb-0:1.2:1.0-video-index0 手部采集尺寸=4000x1200 头部后端=ego 头部配置尺寸=1600x1300 EGO采集尺寸=1600x1300
+2026-11-17 13:06:24.204 +0800 INFO 设备SN：PC=PRT11261104
+2026-11-17 13:06:24.204 +0800 INFO 设备SN：ego=AZEPA6100L9
+2026-11-17 13:06:24.204 +0800 INFO 设备SN：left=0LU221212111102611016
+2026-11-17 13:06:24.204 +0800 INFO 设备SN：right=0RU221212111102611002
+2026-11-17 13:06:24.204 +0800 INFO EGO实际SN=AZEPA6100L9
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/内外参/results/null-left/left_imu_noise_model.yaml 目标=left hand/record/left_imu_noise_model.yaml（默认标定）
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/内外参/results/null-left/calibration_left_hand.json 目标=metadata/calibration_left_hand.json（默认标定）
+2026-11-17 13:06:24.204 +0800 INFO 标定文件：来源=/home/user/UMI/use_new_cam_release/config/TCP/3_相机到指尖/calibration_left_TCP_result.yaml 目标=metadata/calibration_left_TCP_result.yaml
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/内外参/results/null-right/right_imu_noise_model.yaml 目标=right hand/record/right_imu_noise_model.yaml（默认标定）
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/内外参/results/null-right/calibration_right_hand.json 目标=metadata/calibration_right_hand.json（默认标定）
+2026-11-17 13:06:24.204 +0800 INFO 标定文件：来源=/home/user/UMI/use_new_cam_release/config/TCP/3_相机到指尖/calibration_right_TCP_result.yaml 目标=metadata/calibration_right_TCP_result.yaml
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/ego_calibration_export/AZET861006M/fpv_imu_noise_model.yaml 目标=head/record/fpv_imu_noise_model.yaml（默认标定）
+2026-11-17 13:06:24.204 +0800 WARN 标定文件：来源=/home/user/UMI/use_new_cam_release/config/ego_calibration_export/AZET861006M/calibration_head.json 目标=metadata/calibration_head.json（默认标定）
+2026-11-17 13:06:24.205 +0800 INFO 录制开始（操作计时起点，不含按键倒计时及启动准备）
+2026-11-17 13:17:15.707 +0800 INFO 停止录制：原因=用户停止请求
+2026-11-17 13:17:15.846 +0800 INFO EuRoC recording saved: "/home/user/UMI/use_new_cam_release/orbslam3_datasets/UMI_v3_20261117_130624" (left hand: 19545 frames, 522592 live IMU samples; right hand: 19545 frames; head: 19514 synchronized frames; sync timeouts: 31; repeated camera frames: 0; saved FPS left=30.000, right=30.000, head=29.952; 30.000 Hz)
+2026-11-17 13:17:15.846 +0800 INFO 结束时最后观测：电池：电量=50% 成功读取过=否（默认值） 最近通信=失败/未读取
+2026-11-17 13:17:15.846 +0800 INFO 保存结束：结果=成功 操作录制时长秒=651.502299 停止后保存耗时秒=0.139016

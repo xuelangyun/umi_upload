@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UMI 数据中心</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<!-- 页面结构（自上而下）：应用栏 → 中断提示 → [数据源 | 进度] → 工具栏(页签+操作) → 过滤条 → 汇总/分页 → 表格 → 日志。
+     交互统一用 data-act / data-change 属性，处理函数在 js/main.js 的 ACT 表里。样式变量在 css/app.css 顶部。 -->
+
+<header class="appbar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="2" y="11" width="14" height="4" rx="2" fill="currentColor" opacity=".55"/><rect x="2" y="17" width="9" height="4" rx="2" fill="currentColor" opacity=".3"/></svg>
+    <span>UMI <b>数据中心</b></span>
+  </div>
+  <span class="grow"></span>
+  <div class="ctls">
+    <div class="ctl" title="上传方式（两种方式共用 OSS 参数与并发设置）"><label>方式</label>
+      <div class="seg"><button data-act="cfg" data-k="method" data-v="sdk">SDK</button><button data-act="cfg" data-k="method" data-v="ossutil">ossutil</button></div></div>
+    <div class="ctl" data-show="sdk" title="逐文件夹：上个文件夹传完再传下一个；流水线：按清单顺序开始但不等收尾（更快）"><label>顺序</label>
+      <div class="seg"><button data-act="cfg" data-k="order" data-v="folder">逐文件夹</button><button data-act="cfg" data-k="order" data-v="pipeline">流水线</button></div></div>
+    <div class="ctl" data-show="ossutil" title="逐分片：严格按清单顺序，每个分片传完即核对；整会话：一个进程传完整个会话，无文件夹间空档，带宽利用最高"><label>单位</label>
+      <div class="seg"><button data-act="cfg" data-k="ossutil_unit" data-v="slice">逐分片</button><button data-act="cfg" data-k="ossutil_unit" data-v="session">整会话</button></div></div>
+    <div class="ctl" title="同时上传的数据集个数。ossutil 方式下 = 同时运行的 ossutil 进程数；设为 1 即始终单进程"><label>并发</label>
+      <select id="dsj" data-change="cfg" data-k="ds_jobs" class="narrow"><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></div>
+    <span class="vsep"></span>
+    <a class="btn icon" href="/api/export" title="导出上传记录（官方客户端 upload-history 格式）"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>导出</a>
+    <button class="btn icon" data-act="openConfig" title="OSS / 并发配置"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10l2 2M19 5l-2 2M7 17l-2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>配置</button>
+    <button class="btn icon danger" data-act="shutdown" title="退出服务（等同于关闭 cmd 窗口）"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v9M6.4 6.4a8 8 0 1011.2 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>退出</button>
+  </div>
+</header>
+
+<div id="notice" class="notice" hidden></div>
+
+<section class="top">
+  <div class="card src">
+    <div class="card-h"><b>数据源</b><span class="muted" id="sinfo"></span><span class="muted" id="prtp"></span><span class="grow"></span><button class="btn small warn" id="probBtn" data-act="openProblems" hidden></button></div>
+    <div class="chips" id="roots"></div>
+    <div class="bk" id="bkInfo" title="两种数据格式各自上传到的桶（目录名决定格式，格式决定桶）。在「配置」里修改"></div>
+    <div class="row">
+      <button class="btn" id="addBtn" data-act="openBrowse">＋ 添加目录</button>
+      <input id="city" class="w58" placeholder="城市" title="可选：城市缩写，如 xz（自动大写）。城市和房间都填才会覆盖本地目录里的 PRT；都留空 = OSS 路径跟随本地文件夹名" data-input="prt">
+      <input id="room" class="w58" placeholder="房间" title="可选：房间号，如 001。都留空 = OSS 路径跟随本地文件夹名（改名后重新扫描即生效）" data-input="prt">
+      <span class="grow"></span>
+      <label class="check" title="忽略缓存，重新统计每个会话。默认只重新统计有变化的会话，重复扫描很快"><input type="checkbox" id="fullscan"> 完整</label>
+      <label class="check" title="OSS 路径里的房间号补零成 3 位（PRT_WX_room2 → PRT_WX_room002），不改动本地文件夹"><input type="checkbox" id="padroom"> 补零</label>
+      <button class="btn primary" id="scanBtn" data-act="scan">扫描</button>
+    </div>
+  </div>
+
+  <div class="card pp" id="pp">
+    <div class="pp-head"><div><div class="muted" id="ptitle">空闲</div><div class="pct" id="pct">—</div></div>
+      <div class="metrics">
+        <div class="metric"><small>上传速度</small><b id="spd">—</b></div>
+        <div class="metric"><small>进行中 已传 / 总量</small><b id="sent">—</b></div>
+        <div class="metric"><small>文件夹 · 文件</small><b id="fil">—</b></div>
+        <div class="metric"><small>用时 / 剩余</small><b id="eta">—</b></div>
+      </div></div>
+    <div class="bar"><i id="bar1"></i></div>
+    <div class="status-line" id="pl">空闲：勾选数据后点击「上传选中」</div>
+  </div>
+</section>
+
+<div class="toolbar">
+  <div class="tabs"><button id="t1" class="on" data-act="tab" data-n="1">数据列表</button><button id="t2" data-act="tab" data-n="2">上传记录</button></div>
+  <div class="seg fmtseg" id="fmtSeg" title="按数据格式筛选：ISuit-V3 与 UMI_v3 可以同时加载，各自有自己的标定整理方式，上传到各自的桶"></div>
+  <span class="grow"></span>
+  <label class="check"><input type="checkbox" id="force"> 含已上传</label>
+  <span class="grp" id="mvGrp" hidden><span class="grp-l">标定整理</span>
+    <button class="btn act small" id="mvBtn" data-act="openMove" title="ISuit-V3：把 umi_normal 下被判定为标定的数据（时长 &lt; 3 分钟 / 任务名含「标定」）自动列出，确认后移到 umi_calibration 对应目录" hidden>ISuit 自动</button>
+    <button class="btn act small" id="umvBtn" data-act="openMove" data-to="calibration" title="UMI_v3：先点会话名看视频（画面里有二维码 = 标定），勾选后移到 umi_calibration" hidden>UMI 移到标定</button>
+    <button class="btn act small" id="mvBackBtn" data-act="openMove" data-to="normal" title="UMI_v3：把勾选的标定会话移回 umi_normal（选错了可以改回来）" hidden>UMI 移回常规</button></span>
+  <button class="btn act" data-act="run" data-a="verify">快速校验</button>
+  <button class="btn act" data-act="run" data-a="verify_deep">深度校验</button>
+  <button class="btn primary act" id="bup" data-act="run" data-a="upload">上传选中</button>
+</div>
+
+<div class="filters-wrap"><div class="filters" id="flt">
+  <select id="ft"><option value="">全部类型</option><option value="normal">常规</option><option value="calibration">标定</option></select>
+  <select id="fs"></select><select id="fd"></select><select id="fe" title="采集日期（session 目录名里的日期）"></select><select id="fo"></select>
+  <input id="fk" placeholder="任务名"><input id="fc" placeholder="地点">
+  <input id="q" placeholder="关键字（会话目录/本地路径/任务/人员/地点/设备/SN；空格分隔多个词）">
+  <button class="btn primary" data-act="query">查询</button><button class="btn" data-act="clear">清除</button>
+</div></div>
+
+<div class="summary"><div id="cards" class="summary-text"></div><button class="btn small" id="xlsBtn" data-act="exportXlsx" hidden title="按当前查询条件导出上传记录为 Excel（含汇总、按设备、按人员）">导出 Excel</button><button class="btn small" data-act="openGroups" title="按设备 / 按人员 查看累计采集时长">明细</button>
+  <div class="pager"><button class="btn small" data-act="page" data-d="-1">‹</button><span id="pgi" class="muted"></span><button class="btn small" data-act="page" data-d="1">›</button>
+    <select id="ps" data-change="pagesize" class="narrow"><option>50</option><option selected>100</option><option>200</option><option>500</option></select><span class="muted">条/页</span></div></div>
+
+<div class="table-wrap" id="wr"><table id="tb"></table></div>
+
+<section class="logbox" id="logbox">
+  <div class="log-h"><b>运行日志</b><span class="grow"></span><label class="check"><input type="checkbox" id="onlye"> 仅错误</label><button class="btn small" data-act="toggleLog">折叠 ▾</button></div>
+  <div id="lg"></div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<!-- 弹窗：目录选择 / 扫描提示 / OSS 配置；退出后的遮罩 -->
+<div class="modal" id="mb"><div class="dlg"><h3>添加数据根目录</h3><div class="muted">可多选，支持整个盘符；勾选后点「添加所选」，未勾选则添加当前目录</div>
+  <div class="muted" id="bp"></div><div class="muted ok-text" id="bh"></div><div class="dirlist" id="bl"></div>
+  <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mb">取消</button><button class="btn primary" data-act="addRoots">添加所选</button></div></div></div>
+
+<div class="modal" id="mg"><div class="dlg wide"><h3>累计采集时长明细</h3><div class="muted" id="gscope"></div><div id="gbody" class="gbody"></div>
+  <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mg">关闭</button></div></div></div>
+
+<div class="modal" id="mm"><div class="dlg wide xl"><h3 id="mmTitle">移动错放的标定数据</h3>
+  <div class="muted" id="mmDesc">umi_normal 下被判定为标定（时长 &lt; 3 分钟 / 任务名含「标定」/ 采集配置声明为标定）的会话，移动到 umi_calibration 的同层级目录。只做改名移动，不复制、不覆盖。</div>
+  <div id="mbody" class="gbody"></div><div id="mres" class="mres"></div>
+  <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mm">关闭</button><button class="btn primary" id="mgo" data-act="doMove">移动选中</button></div></div></div>
+
+<div class="modal" id="vm"><div class="dlg wide xl vdlg"><h3 id="vtitle">视频预览</h3>
+  <div class="muted" id="vinfo"></div>
+  <div class="vbar"><select id="vsel" title="选择相机视频"></select><label class="vlab">倍速<select id="vrate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option></select></label>
+    <button class="btn small" data-act="stepVideo" data-d="-1" title="列表里的上一个会话">◀ 上一个</button><button class="btn small" data-act="stepVideo" data-d="1" title="列表里的下一个会话">下一个 ▶</button></div>
+  <video id="vplayer" controls preload="metadata"></video>
+  <div class="muted" id="vdur"></div><div class="e-text" id="verr"></div>
+  <div class="muted vhint">判断方法：<b>画面里出现二维码 = 标定</b>；标定视频的播放时间通常小于 3 分钟。确认后点下面的按钮移动整个会话文件夹（只改名移动，不复制、不覆盖；原来的会话在 OSS 上的路径会随之变化，已上传的需要重新上传）。</div>
+  <div class="dlg-f"><button class="btn" data-act="videoFolder">打开文件夹</button><span class="grow"></span><button class="btn" data-act="closeVideo">关闭</button>
+    <button class="btn primary" id="vmove" data-act="videoMove"></button></div></div></div>
+
+<div class="modal" id="mp"><div class="dlg wide"><h3>扫描提示</h3><div id="pbody" class="pbody"></div>
+  <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mp">关闭</button></div></div></div>
+
+<div class="modal" id="mc"><div class="dlg"><h3>OSS / 并发配置</h3><div class="muted">SDK 与 ossutil 共用以下参数（ossutil 会据此生成临时配置文件，退出即删）</div>
+  <h4 class="sec">连接</h4><label>Endpoint</label><input id="c_endpoint"><label>Access Key ID</label><input id="c_ak"><label>Access Key Secret</label><input id="c_sk" type="password">
+  <h4 class="sec">上传到哪个桶（两种格式各传各的桶，目录名决定格式）</h4><label>ISuit-V3 桶（目录名 ISuit-V3_… 的数据）</label><input id="c_bucket" spellcheck="false" autocomplete="off"><label>UMI_v3 桶（目录名 UMI_v3_… 的数据）</label><input id="c_bucket_umi" spellcheck="false" autocomplete="off">
+  <h4 class="sec">并发与多出口负载均衡</h4><label>并发：同时上传的数据集数（ossutil 进程数） / 每进程同时传的文件数 / 每个大文件的分片并发</label><div class="row"><input id="c_ds_jobs" type="number" min="1"><input id="c_jobs" type="number" min="1"><input id="c_parallel" type="number" min="1"></div>
+  <label>网络出口数（多条 WAN 做负载均衡时填；负载均衡按「连接」分流，要把每个出口都跑满，就需要足够多的并发连接）</label><div class="row"><input id="c_wan" type="number" min="1" max="16"><button class="btn" data-act="applyNet" title="按出口数填入建议的并发参数（填入后点「保存」生效）">套用建议并发</button></div>
+  <div class="muted" id="c_net" style="min-height:34px"></div>
+  <h4 class="sec">ossutil</h4><label>ossutil 路径（默认：与 umi_web.py 同级的 ossutil.exe）</label><input id="c_ossutil_path" placeholder="留空 = 使用与 umi_web.py 同级的 ossutil.exe">
+  <label>ossutil 额外参数（一般留空）</label><input id="c_ossutil_args">
+  <label>断网自动等待（分钟；ossutil 方式。断网后每隔几秒探测，恢复后自动续传；超时才算失败，0 = 不等待）</label><input id="c_net_wait" type="number" min="0">
+  <div class="muted" id="cmsg" style="margin:8px 0;min-height:18px"></div>
+  <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mc">关闭</button><button class="btn" data-act="saveConfig">保存</button><button class="btn primary" data-act="saveConfig" data-test="1">保存并测试</button></div></div></div>
+
+<div class="modal solid" id="bye"><div class="dlg"><h3>服务已停止</h3><div class="muted">可以关闭此页面。再次使用请重新运行 start.bat。</div></div></div>
+
+<!-- 脚本按依赖顺序加载（均为普通脚本，共享全局）：util → api → panel → filters → tables → dialogs → main -->
+<script src="/static/js/util.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/panel.js"></script>
+<script src="/static/js/filters.js"></script>
+<script src="/static/js/tables.js"></script>
+<script src="/static/js/dialogs.js"></script>
+<script src="/static/js/video.js"></script>
+<script src="/static/js/main.js"></script>
+</body>
+</html>
