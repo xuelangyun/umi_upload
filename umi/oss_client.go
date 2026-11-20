@@ -504,6 +504,8 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 				uo.CheckpointDir = ckptDir
 			}
 		})
+		// Use OSS SDK v2 Uploader.UploadFile (file path API), not UploadFrom.
+		// The SDK manages multipart transfer and can reuse its local checkpoint.
 		req := &oss.PutObjectRequest{
 			Bucket: oss.Ptr(c.params.Bucket),
 			Key:    oss.Ptr(key),

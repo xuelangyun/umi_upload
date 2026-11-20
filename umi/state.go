@@ -50,10 +50,10 @@ var OKStates = map[string]bool{
 }
 
 var SDKDefaults = map[string]string{
-	"endpoint":     "https://oss-cn-hangzhou.aliyuncs.com",
+	"endpoint":     "http://10.20.100.10:9000",
 	"storage_type": "aliyun",
-	"ak":           "",
-	"sk":           "",
+	"ak":           "minioadmin",
+	"sk":           "minioadmin@123",
 	"bucket":       "hw-upload",
 	"bucket_umi":   "prt-huawei",
 }
