@@ -57,9 +57,14 @@ var (
 	ProbeMax = 60.0
 )
 
-// NewOSSClientFunc creates an OSSClient for a specific bucket; swappable in unit/smoke tests.
+// NewOSSClientFunc selects the protocol by endpoint, matching sample/upload_umi_sdk.py:
+// Alibaba Cloud OSS uses the Alibaba OSS SDK; MinIO/S3-compatible endpoints use AWS Signature V4.
 var NewOSSClientFunc = func(p OSSParams) (OSSClient, error) {
-	return NewAliyunOSSClient(p)
+	_, _, isAliyun, _ := parseEndpointInfo(p.Endpoint)
+	if isAliyun {
+		return NewAliyunOSSClient(p)
+	}
+	return NewS3CompatibleClient(p)
 }
 
 func BuildOSSParams(cfg map[string]string, bucket string) OSSParams {
@@ -115,8 +120,8 @@ func parseEndpointInfo(rawEndpoint string) (normalizedEndpoint, region string, i
 	if m := reAliyunRegion2.FindStringSubmatch(host); m != nil {
 		return ep, m[1], true, false
 	}
-	// Custom / MinIO / IP / localhost endpoints use path-style + V1 signature compatibility.
-	return ep, "cn-hangzhou", false, true
+	// Custom / MinIO / IP / localhost endpoints are S3-compatible and must use AWS Signature V4.
+	return ep, "us-east-1", false, true
 }
 
 // AliyunOSSClient implements OSSClient on top of github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss.
@@ -137,6 +142,9 @@ func NewAliyunOSSClient(p OSSParams) (*AliyunOSSClient, error) {
 		return nil, NewUploadError("Bucket 不能为空")
 	}
 	ep, region, isAliyun, pathStyle := parseEndpointInfo(p.Endpoint)
+	if !isAliyun {
+		return nil, NewUploadError("自建 MinIO/S3 Endpoint 应使用 AWS Signature V4 客户端")
+	}
 	cred := credentials.NewStaticCredentialsProvider(p.AK, p.SK)
 
 	buildCfg := func(maxAttempts int, readWriteTimeout time.Duration) *oss.Config {
@@ -148,9 +156,6 @@ func NewAliyunOSSClient(p OSSParams) (*AliyunOSSClient, error) {
 			WithRetryMaxAttempts(maxAttempts).
 			WithConnectTimeout(8 * time.Second).
 			WithReadWriteTimeout(readWriteTimeout)
-		if !isAliyun {
-			cfg = cfg.WithSignatureVersion(oss.SignatureVersionV1)
-		}
 		return cfg
 	}
 
@@ -196,6 +201,10 @@ func isNoSuchKey(err error) bool {
 			return true
 		}
 	}
+	var s3Err *S3APIError
+	if errors.As(err, &s3Err) && (s3Err.StatusCode == http.StatusNotFound || s3Err.Code == "NoSuchKey") {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "NoSuchKey") || strings.Contains(msg, "StatusCode: 404") || strings.Contains(msg, "status code 404")
 }
@@ -215,6 +224,10 @@ func LooksNetwork(err error) bool {
 	var svcErr *oss.ServiceError
 	if errors.As(err, &svcErr) {
 		return svcErr.StatusCode == 408 || svcErr.StatusCode == 429 || svcErr.StatusCode >= 500
+	}
+	var s3Err *S3APIError
+	if errors.As(err, &s3Err) {
+		return s3Err.StatusCode == 408 || s3Err.StatusCode == 429 || s3Err.StatusCode >= 500
 	}
 	s := strings.ToLower(err.Error())
 	for _, kw := range []string{
