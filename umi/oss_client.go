@@ -439,98 +439,78 @@ func (c *AliyunOSSClient) ListObjects(uriPrefix string) ([]RemoteObj, error) {
 }
 
 func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir string, onDelta func(int64)) error {
-	if size < MultipartThreshold {
-		var reported int64
-		err := c.runWithRetry(func() error {
-			if reported > 0 && onDelta != nil {
-				onDelta(-reported)
-				reported = 0
-			}
-			f, oerr := os.Open(localPath)
-			if oerr != nil {
-				return oerr
-			}
-			defer f.Close()
-			req := &oss.PutObjectRequest{
-				Bucket: oss.Ptr(c.params.Bucket),
-				Key:    oss.Ptr(key),
-				Body:   f,
-				ProgressFn: func(inc, transferred, total int64) {
-					if inc > 0 && onDelta != nil {
-						reported += inc
-						onDelta(inc)
-					}
-				},
-			}
-			_, perr := c.client.PutObject(AppCtx, req)
-			return perr
-		})
-		if err != nil {
-			if reported > 0 && onDelta != nil {
-				onDelta(-reported)
-			}
-			return err
-		}
-		if size > reported && onDelta != nil {
-			onDelta(size - reported)
-		}
-		return nil
+	if size < 0 {
+		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
 
-	if ckptDir != "" {
-		_ = os.MkdirAll(ckptDir, 0o700)
-	}
 	parallel := c.params.Parallel
 	if parallel < 1 {
 		parallel = 4
 	}
 
+	// All local files go through the SDK v2 file-path API. Uploader.UploadFile
+	// internally uses PutObject for files smaller than PartSize and multipart
+	// for larger files. Enable persistent checkpoints for multipart-sized files.
+	useCheckpoint := size >= MultipartThreshold && ckptDir != ""
+	if useCheckpoint {
+		if err := os.MkdirAll(ckptDir, 0o700); err != nil {
+			return fmt.Errorf("创建 OSS checkpoint 目录失败: %w", err)
+		}
+	}
+
 	var reported int64
 	var progMu sync.Mutex
-	err := c.runWithRetry(func() error {
+	rollbackProgress := func() {
 		progMu.Lock()
-		if reported > 0 && onDelta != nil {
-			onDelta(-reported)
-			reported = 0
-		}
+		n := reported
+		reported = 0
 		progMu.Unlock()
+		if n > 0 && onDelta != nil {
+			onDelta(-n)
+		}
+	}
+
+	err := c.runWithRetry(func() error {
+		// A retry restarts progress accounting. For multipart uploads the SDK
+		// may resume from checkpoint; the completed bytes will be reported again.
+		rollbackProgress()
 
 		uploader := oss.NewUploader(c.client, func(uo *oss.UploaderOptions) {
 			uo.PartSize = PartSize
 			uo.ParallelNum = parallel
 			uo.LeavePartsOnError = true
-			if ckptDir != "" {
+			if useCheckpoint {
 				uo.EnableCheckpoint = true
 				uo.CheckpointDir = ckptDir
 			}
 		})
-		// Use OSS SDK v2 Uploader.UploadFile (file path API), not UploadFrom.
-		// The SDK manages multipart transfer and can reuse its local checkpoint.
+
 		req := &oss.PutObjectRequest{
 			Bucket: oss.Ptr(c.params.Bucket),
 			Key:    oss.Ptr(key),
 			ProgressFn: func(inc, transferred, total int64) {
-				if inc > 0 && onDelta != nil {
-					progMu.Lock()
-					reported += inc
-					progMu.Unlock()
-					onDelta(inc)
+				if inc <= 0 || onDelta == nil {
+					return
 				}
+				progMu.Lock()
+				reported += inc
+				progMu.Unlock()
+				onDelta(inc)
 			},
 		}
-		_, uerr := uploader.UploadFile(AppCtx, req, localPath)
-		return uerr
+
+		// Use Uploader.UploadFile (not UploadFrom): the SDK opens the local
+		// path itself and supports persistent multipart checkpoint recovery.
+		_, uploadErr := uploader.UploadFile(AppCtx, req, localPath)
+		return uploadErr
 	})
 	if err != nil {
-		progMu.Lock()
-		rem := reported
-		reported = 0
-		progMu.Unlock()
-		if rem > 0 && onDelta != nil {
-			onDelta(-rem)
-		}
+		rollbackProgress()
 		return err
 	}
+
+	// SDK v1.6.1 does not emit ProgressFn for its internal single-part path.
+	// Account for small files only after the single PutObject has completed.
 	progMu.Lock()
 	diff := size - reported
 	reported = size
