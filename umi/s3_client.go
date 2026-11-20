@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -395,6 +394,3 @@ func mathMin(a, b float64) float64 {
 	return b
 }
 
-// Keep the net package linked here so custom proxy transports can be adjusted
-// without changing the S3 compatibility boundary.
-var _ net.Error
