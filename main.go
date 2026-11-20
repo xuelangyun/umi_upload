@@ -94,7 +94,7 @@ func main() {
 		_ = srv.Shutdown(ctx)
 	})
 
-	fmt.Printf("UMI 数据中心（阿里云 Go SDK 版 %s）已启动：%s\n数据库：%s\n直接关闭本窗口即可退出。\n", Version, url, umi.DBPath)
+	fmt.Printf("UMI 数据中心（Go 单文件版 %s）已启动：%s\n数据库：%s\n直接关闭本窗口即可退出。\n", Version, url, umi.DBPath)
 	if !*noBrowser {
 		go func() {
 			time.Sleep(400 * time.Millisecond)
