@@ -37,9 +37,11 @@ type mockOSSServer struct {
 	writeLog    []string                               // "<bucket>/<key>" in exact commit order
 	partUploads int64                                  // total UploadPart calls succeeded
 	putSkips    map[string]int                         // bucket/key -> PutObject count
-	nextUpID    int
-	netMode     string // "" = healthy, "all" = all ops fail 503, "put_after_1" = fail writes & probes after 1 write
-	writesSince int
+	nextUpID       int
+	netMode        string // "" = healthy, "all" = all ops fail 503, "put_after_1" = fail writes & probes after 1 write
+	writesSince    int
+	requireV4      bool
+	sigV4Requests  int
 }
 
 func newMockOSSServer() *mockOSSServer {
@@ -158,12 +160,38 @@ func (m *mockOSSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if m.requireV4 {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=test-ak/") {
+			m.mu.Unlock()
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidRequest</Code><Message>AWS Signature V4 required</Message></Error>`))
+			return
+		}
+		m.sigV4Requests++
+	}
 	m.mu.Unlock()
 
 	if shouldFailNet {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>ServiceUnavailable</Code><Message>simulated network outage</Message></Error>`))
+		return
+	}
+
+	// BucketExists: HEAD /{bucket}
+	if r.Method == http.MethodHead && key == "" {
+		m.mu.Lock()
+		_, exists := m.objects[bucket]
+		m.mu.Unlock()
+		if !exists {
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code></Error>`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -1301,5 +1329,66 @@ func copyDirRecursive(t *testing.T, src, dst string) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+
+func TestS3CompatibleClientUsesAWSV4AndMultipart(t *testing.T) {
+	mock := newMockOSSServer()
+	mock.objects["test-bucket"] = map[string][]byte{}
+	mock.requireV4 = true
+	srv := httptest.NewServer(mock)
+	defer srv.Close()
+
+	client, err := NewS3CompatibleClient(OSSParams{
+		Endpoint:       srv.URL,
+		AK:             "test-ak",
+		SK:             "test-sk",
+		Bucket:         "test-bucket",
+		Parallel:       2,
+		NetWaitMinutes: 0,
+	})
+	if err != nil {
+		t.Fatalf("create S3 client: %v", err)
+	}
+	if err := client.TestBucket(); err != nil {
+		t.Fatalf("AWS V4 bucket probe failed: %v", err)
+	}
+
+	prefix := "oss://test-bucket/parity/"
+	if err := client.PutObject(prefix+"manifest.json", []byte(`{"version":1}`)); err != nil {
+		t.Fatalf("small S3 object PUT failed: %v", err)
+	}
+	body, found, err := client.ReadObject(prefix + "manifest.json")
+	if err != nil || !found || string(body) != `{"version":1}` {
+		t.Fatalf("S3 read-back mismatch: found=%v body=%q err=%v", found, string(body), err)
+	}
+
+	tmp := t.TempDir()
+	local := filepath.Join(tmp, "large-video.bin")
+	payload := bytes.Repeat([]byte("s3-multipart-v4-"), 700*1024) // > 10 MiB
+	if err := os.WriteFile(local, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.UploadFile(local, "parity/large-video.bin", int64(len(payload)), "", nil); err != nil {
+		t.Fatalf("S3 multipart upload failed: %v", err)
+	}
+	uploaded, ok := mock.getObjectBytes("test-bucket", "parity/large-video.bin")
+	if !ok || !bytes.Equal(uploaded, payload) {
+		t.Fatalf("S3 multipart payload mismatch: found=%v got=%d want=%d", ok, len(uploaded), len(payload))
+	}
+
+	items, err := client.ListObjects(prefix)
+	if err != nil {
+		t.Fatalf("S3 list objects failed: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected manifest + uploaded video in list, got %d: %+v", len(items), items)
+	}
+	mock.mu.Lock()
+	v4Requests := mock.sigV4Requests
+	mock.mu.Unlock()
+	if v4Requests < 6 {
+		t.Fatalf("expected AWS Signature V4 on all S3 requests, observed %d requests", v4Requests)
 	}
 }
