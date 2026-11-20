@@ -136,7 +136,7 @@ func buildWindowsExe(outPath, ver string) error {
 	}
 	defer os.Remove(resourcePath)
 
-	fmt.Printf("[BUILD] Cross-compiling %s (version=%s)...\\n", outPath, ver)
+	fmt.Printf("[BUILD] Cross-compiling %s (version=%s)...\n", outPath, ver)
 	ldflags := fmt.Sprintf("-s -w -X main.Version=%s", ver)
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", outPath, ".")
 	cmd.Env = append(os.Environ(),
