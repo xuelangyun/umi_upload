@@ -64,6 +64,8 @@ func TestDynamicLimiterAcquireHonorsContext(t *testing.T) {
 
 func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	oldParallel := runtimeParallel.Load()
+	oldActiveCfg := ActiveCfg()
+	defer setActiveCfg(oldActiveCfg)
 	runtimeConfigMu.Lock()
 	oldApplied := runtimeAppliedCfg
 	runtimeAppliedCfg = nil
@@ -86,7 +88,10 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 		"jobs": "5", "ds_jobs": "3", "parallel": "7",
 		"max_jobs": "20", "max_parallel": "8", "target_mbps": "350",
 	}
-	ApplyRuntimeConfig(cfg)
+	ApplyActiveRuntimeConfig(cfg, false)
+	if got := ActiveCfg()["target_mbps"]; got != "350" {
+		t.Fatalf("active target_mbps = %q, want 350", got)
+	}
 	_, fileLimit := files.Stats()
 	_, datasetLimit := datasets.Stats()
 	if fileLimit != 15 { t.Fatalf("file limit = %d, want 15", fileLimit) }
@@ -100,14 +105,14 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	updated := copyStringMap(cfg)
 	updated["target_mbps"] = "420"
 	updated["auto_tune"] = "false"
-	ApplyRuntimeConfig(updated)
+	ApplyActiveRuntimeConfig(updated, false)
 	_, fileLimit = files.Stats()
 	if fileLimit != 18 { t.Fatalf("unrelated config update reset file limit to %d, want 18", fileLimit) }
 	if got := CurrentUploadParallel(4); got != 8 { t.Fatalf("unrelated config update reset parallel to %d, want 8", got) }
 
 	// An explicit max_parallel change rebases the multipart limit immediately.
 	updated["max_parallel"] = "5"
-	ApplyRuntimeConfig(updated)
+	ApplyActiveRuntimeConfig(updated, false)
 	if got := CurrentUploadParallel(4); got != 5 { t.Fatalf("parallel after lowering max_parallel = %d, want 5", got) }
 }
 func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
@@ -129,9 +134,12 @@ func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
 		"jobs": "5", "ds_jobs": "2", "parallel": "4",
 		"max_jobs": "20", "max_parallel": "12",
 	}
-	ApplyRuntimeConfig(cfg)
+	ApplyActiveRuntimeConfig(cfg, false)
 	runtimeParallel.Store(9)
 	ResetRuntimeTuning(cfg)
+	if got := ActiveCfg()["parallel"]; got != "4" {
+		t.Fatalf("active parallel = %q, want 4", got)
+	}
 	if got := CurrentUploadParallel(1); got != 4 {
 		t.Fatalf("new upload inherited tuned parallel %d, want configured baseline 4", got)
 	}
