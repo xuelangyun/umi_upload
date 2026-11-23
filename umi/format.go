@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -292,6 +293,34 @@ type CommitInfo struct {
 	Manifest Manifest
 }
 
+func validateManifestFiles(files []ManifestFile) error {
+	seen := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		if f.Path == "" || strings.ContainsAny(f.Path, "\\\\\x00\\r\\n") || strings.HasPrefix(f.Path, "/") || path.Clean(f.Path) != f.Path || f.Path == "." {
+			return NewUploadError("manifest 文件路径非法: %q", f.Path)
+		}
+		for _, part := range strings.Split(f.Path, "/") {
+			if part == "" || part == "." || part == ".." {
+				return NewUploadError("manifest 文件路径非法: %q", f.Path)
+			}
+		}
+		if f.Size < 0 {
+			return NewUploadError("manifest 文件大小非法: %q", f.Path)
+		}
+		if len(f.SHA256) != 64 {
+			return NewUploadError("manifest 文件 SHA256 格式非法: %q", f.Path)
+		}
+		if _, err := hex.DecodeString(f.SHA256); err != nil {
+			return NewUploadError("manifest 文件 SHA256 格式非法: %q", f.Path)
+		}
+		if _, exists := seen[f.Path]; exists {
+			return NewUploadError("manifest 存在重复文件路径: %q", f.Path)
+		}
+		seen[f.Path] = struct{}{}
+	}
+	return nil
+}
+
 func jsonMarshalNoEscape(v any, indent string) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -392,6 +421,12 @@ func RemoteCommit(oss OSSClient, rawURI string) (*CommitInfo, error) {
 	}
 	if manifest.SchemaVersion != 1 {
 		return nil, NewUploadError("远端 manifest.json schema_version 不受支持: %s", rawURI)
+	}
+	if manifest.DatasetID == "" || manifest.CaptureDate == "" || manifest.DatasetType == "" {
+		return nil, NewUploadError("远端 manifest.json 数据集标识字段为空: %s", rawURI)
+	}
+	if err := validateManifestFiles(manifest.Files); err != nil {
+		return nil, NewUploadError("远端 manifest.json 文件清单非法: %s: %v", rawURI, err)
 	}
 	expectedRevision, err := manifestRevision(manifest.DatasetID, manifest.CaptureDate, manifest.DatasetType, manifest.Files)
 	if err != nil {
