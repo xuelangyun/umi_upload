@@ -1405,20 +1405,27 @@ func TestS3CompatibleClientUsesAWSV4AndMultipart(t *testing.T) {
 	if err := os.WriteFile(local, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var reportedBytes int64
+	var reportedBytes, trafficBytes int64
 	var progressMu sync.Mutex
 	if err := client.UploadFile(local, "parity/large-video.bin", int64(len(payload)), "", func(n int64) {
 		progressMu.Lock()
 		reportedBytes += n
 		progressMu.Unlock()
-	}, nil); err != nil {
+	}, func(n int64) {
+		progressMu.Lock()
+		trafficBytes += n
+		progressMu.Unlock()
+	}); err != nil {
 		t.Fatalf("S3 multipart upload failed: %v", err)
 	}
 	progressMu.Lock()
-	gotProgress := reportedBytes
+	gotProgress, gotTraffic := reportedBytes, trafficBytes
 	progressMu.Unlock()
 	if gotProgress != int64(len(payload)) {
 		t.Fatalf("S3 request-body progress = %d, want %d", gotProgress, len(payload))
+	}
+	if gotTraffic != int64(len(payload)) {
+		t.Fatalf("S3 request-body traffic = %d, want %d", gotTraffic, len(payload))
 	}
 	uploaded, ok := mock.getObjectBytes("test-bucket", "parity/large-video.bin")
 	if !ok || !bytes.Equal(uploaded, payload) {
