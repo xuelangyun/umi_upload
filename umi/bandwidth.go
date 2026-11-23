@@ -218,6 +218,16 @@ func configFloat(cfg map[string]string, key string, fallback float64) float64 {
 	return fallback
 }
 
+// tuneActionAllowed revalidates a pending increase against the latest settings.
+// The caller must hold runtimeConfigMu while reading the active configuration.
+func tuneActionAllowed(cfg map[string]string, speedMbps float64) bool {
+	if !configBool(cfg, "auto_tune", true) {
+		return false
+	}
+	target := configFloat(cfg, "target_mbps", 350)
+	return target <= 0 || speedMbps < target*0.95
+}
+
 // StartBandwidthTuner adjusts only future file admissions and future multipart
 // requests. It never cancels an in-flight object upload or changes commit order.
 type bandwidthTuneDecision struct {
@@ -324,6 +334,16 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				case "files":
 					runtimeConfigMu.Lock()
 					latestCfg := ActiveCfg()
+					if !tuneActionAllowed(latestCfg, speed) {
+						runtimeConfigMu.Unlock()
+						if !configBool(latestCfg, "auto_tune", true) {
+							decision.state, decision.reason = "manual", "自动调优已关闭，取消过期的并发增加"
+						} else {
+							decision.state, decision.reason = "holding", "最新目标带宽已达到，取消过期的并发增加"
+						}
+						decision.action = ""
+						break
+					}
 					_, currentLimit := job.UploadLimiter.Stats()
 					nextLimit := decision.fileLimit
 					if ceiling := configInt(latestCfg, "max_jobs", 48); nextLimit > ceiling {
@@ -334,10 +354,20 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					}
 					runtimeConfigMu.Unlock()
 					decision.fileLimit = nextLimit
-					JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextLimit, speed, target))
+					JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextLimit, speed, configFloat(latestCfg, "target_mbps", 350)))
 				case "parts":
 					runtimeConfigMu.Lock()
 					latestCfg := ActiveCfg()
+					if !tuneActionAllowed(latestCfg, speed) {
+						runtimeConfigMu.Unlock()
+						if !configBool(latestCfg, "auto_tune", true) {
+							decision.state, decision.reason = "manual", "自动调优已关闭，取消过期的并发增加"
+						} else {
+							decision.state, decision.reason = "holding", "最新目标带宽已达到，取消过期的并发增加"
+						}
+						decision.action = ""
+						break
+					}
 					currentParallel := CurrentUploadParallel(4)
 					nextParallel := currentParallel + 1
 					if ceiling := configInt(latestCfg, "max_parallel", 12); nextParallel > ceiling {
@@ -348,7 +378,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					}
 					runtimeConfigMu.Unlock()
 					decision.parallel = nextParallel
-					JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextParallel, speed, target))
+					JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextParallel, speed, configFloat(latestCfg, "target_mbps", 350)))
 				}
 				setBandwidthTuneStatus(BandwidthTuneStatus{
 					Enabled: enabled, TargetMbps: target, CurrentMbps: speed,
