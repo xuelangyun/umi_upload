@@ -303,7 +303,7 @@ func validateManifestFiles(files []ManifestFile) error {
 			return NewUploadError("manifest 文件路径非法: %q", f.Path)
 		}
 		for _, part := range strings.Split(f.Path, "/") {
-			if part == "" || part == "." || part == ".." {
+			if err := SafePart(part); err != nil {
 				return NewUploadError("manifest 文件路径非法: %q", f.Path)
 			}
 		}
