@@ -29,7 +29,7 @@ func (f *verifyFakeOSS) ReadObject(uri string) ([]byte, bool, error) {
 	b, ok := f.objects[uri]
 	out := append([]byte(nil), b...)
 	if ok && f.tamperManifestRead && strings.HasSuffix(uri, "manifest.json") && len(out) > 0 {
-		out[len(out)-1] ^= 1
+		out = []byte(strings.Replace(string(out), "abc", "abd", 1))
 	}
 	return out, ok, nil
 }
