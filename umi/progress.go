@@ -72,9 +72,10 @@ func (m *Meter) Speed() float64 {
 	return float64(diff) / dt
 }
 
-// HasRecentActivity reports whether actual upload bytes were acknowledged
-// within the supplied interval. A zero throughput sample alone cannot
-// distinguish an idle/hash phase from a stalled transfer.
+// HasRecentActivity reports whether the SDK observed outbound upload
+// activity within the supplied interval. Depending on the storage SDK this may
+// represent request-body bytes read or successfully completed multipart parts;
+// it is an activity signal, not a server-side or WAN-interface counter.
 func (m *Meter) HasRecentActivity(within time.Duration) bool {
 	if m == nil || within <= 0 {
 		return false
