@@ -200,6 +200,32 @@ func TestVerifyOneDetectsManifestInventoryMismatchWithoutDeepHash(t *testing.T) 
 	}
 }
 
+func TestVerifyOneDetectsManifestDatasetIdentityMismatch(t *testing.T) {
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake := fakeCommittedManifest(t, Manifest{
+		SchemaVersion: 1,
+		DatasetID: "different-dataset",
+		CaptureDate: "2026-11-23",
+		DatasetType: "test",
+		Files: []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: strings.Repeat("a", 64)}},
+		CreatedAt: "2026-11-23T00:00:00.000Z",
+	})
+	fake.files = []RemoteObj{{Name: "payload.bin", Size: 4}}
+	result, err := VerifyOne(fake, &DatasetMeta{
+		Name: "dataset", CaptureDate: "2026-11-23", Type: "test",
+		Source: src, RawURI: "oss://test/dataset/",
+	}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "不一致" || len(result.ManifestDiff) != 1 || result.ManifestDiff[0] != "dataset_id" {
+		t.Fatalf("manifest identity mismatch was not reported: status=%q diff=%v", result.Status, result.ManifestDiff)
+	}
+}
+
 func TestVerifyOneReportsMissingReadyWhenNoCommitExists(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
