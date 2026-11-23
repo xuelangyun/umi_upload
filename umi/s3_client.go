@@ -238,10 +238,7 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 	if size < 0 {
 		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
-	parallel := c.params.Parallel
-	if parallel < 1 {
-		parallel = 4
-	}
+	parallel := CurrentUploadParallel(c.params.Parallel)
 
 	var reported int64
 	var progressMu sync.Mutex
