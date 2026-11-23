@@ -107,6 +107,7 @@ type JobContext struct {
 
 // Job represents an entire batch upload / verify / verify_deep run.
 type Job struct {
+	UploadLimiter *DynamicLimiter
 	ID         string
 	Action     string
 	RunID      int64
