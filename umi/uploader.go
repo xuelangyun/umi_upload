@@ -440,8 +440,13 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		var wg sync.WaitGroup
 		for gi, g := range groups {
 			for _, idx := range g.Indices {
-				if err := limiter.Acquire(AppCtx); err != nil { break }
-					wg.Add(1)
+				if err := limiter.Acquire(AppCtx); err != nil {
+					errMu.Lock()
+					if firstErr == nil { firstErr = err }
+					errMu.Unlock()
+					break
+				}
+				wg.Add(1)
 				go func(groupI, itemI int) {
 					defer wg.Done()
 					defer limiter.Release()
@@ -508,7 +513,12 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 
 		for _, idx := range g.Indices {
 			it := sortedInv[idx]
-			if err := limiter.Acquire(AppCtx); err != nil { break }
+			if err := limiter.Acquire(AppCtx); err != nil {
+				errMu.Lock()
+				if firstErr == nil { firstErr = err }
+				errMu.Unlock()
+				break
+			}
 			wg.Add(1)
 			go func(item InvItem) {
 				defer wg.Done()
