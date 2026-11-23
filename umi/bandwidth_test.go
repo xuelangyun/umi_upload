@@ -352,6 +352,24 @@ func TestDecideBandwidthTune(t *testing.T) {
 }
 
 
+func TestShouldWaitForUploadActivityIncludesIdleJobs(t *testing.T) {
+	tests := []struct {
+		name, enabled, recent bool
+		want                  bool
+	}{
+		{name: "idle auto tuner waits", enabled: true, recent: false, want: true},
+		{name: "active transfer can tune", enabled: true, recent: true, want: false},
+		{name: "manual mode does not wait", enabled: false, recent: false, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldWaitForUploadActivity(tt.enabled, tt.recent); got != tt.want {
+				t.Fatalf("shouldWaitForUploadActivity(%v, %v) = %v, want %v", tt.enabled, tt.recent, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestMeterHasRecentActivityPreventsStaleThroughputTuning verifies that a
 // previously active transfer is not mistaken for current upload activity.
 func TestMeterHasRecentActivityPreventsStaleThroughputTuning(t *testing.T) {
