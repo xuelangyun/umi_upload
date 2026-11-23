@@ -174,11 +174,12 @@ func (r *DatasetRecord) Clone() *DatasetRecord {
 }
 
 type ScanResult struct {
-	Count      int    `json:"count,omitempty"`
-	Problems   int    `json:"problems,omitempty"`
-	Cached     int    `json:"cached,omitempty"`
-	Scanned    int    `json:"scanned,omitempty"`
-	Overridden int    `json:"overridden,omitempty"`
+	// Numeric counters are always serialized: zero is a meaningful scan result.
+	Count      int    `json:"count"`
+	Problems   int    `json:"problems"`
+	Cached     int    `json:"cached"`
+	Scanned    int    `json:"scanned"`
+	Overridden int    `json:"overridden"`
 	Error      string `json:"error,omitempty"`
 }
 
