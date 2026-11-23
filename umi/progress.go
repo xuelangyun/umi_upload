@@ -2,6 +2,7 @@ package umi
 
 import (
 	"crypto/sha256"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -205,6 +206,12 @@ func AddSent(ctx *JobContext, n int64) {
 }
 
 func HashFile(path string, ctx *JobContext) (string, error) {
+	return hashFileWithStop(path, ctx, nil)
+}
+
+// hashFileWithStop checks the caller's stop signal between bounded reads so
+// background pre-hashing can stop promptly after an upload failure.
+func hashFileWithStop(path string, ctx *JobContext, stop <-chan struct{}) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -213,8 +220,12 @@ func HashFile(path string, ctx *JobContext) (string, error) {
 	h := sha256.New()
 	buf := make([]byte, 4*1024*1024)
 	for {
-		if AppCtx.Err() != nil {
+		select {
+		case <-stop:
+			return "", context.Canceled
+		case <-AppCtx.Done():
 			return "", AppCtx.Err()
+		default:
 		}
 		n, rerr := f.Read(buf)
 		if n > 0 {
