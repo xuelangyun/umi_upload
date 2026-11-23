@@ -4,15 +4,15 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# Prevent overlapping builds from publishing stale packages to the latest release.
+concurrency:
+  group: umi-upload-latest-release
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
@@ -27,24 +27,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Resolve module graph
-        run: go mod tidy
-
-      - name: Run Tests
-        run: go test -count=1 -race ./...
-
-      - name: Upload resolved module files
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolved-go-modules
-          path: |
-            go.mod
-            go.sum
-
-      - name: Package Windows Release
+      - name: Build package
         run: go run scripts/package_release.go -out dist
 
-      - name: Upload Workflow Artifacts
+      - name: Upload temporary build artifact
         uses: actions/upload-artifact@v4
         with:
           name: umi_upload-windows-amd64
@@ -52,43 +38,34 @@ jobs:
             dist/umi_upload.exe
             dist/umi_upload-windows-amd64.zip
             dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
 
-      - name: Publish GitHub Release
-        if: github.event_name == 'push'
+      - name: Publish latest release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REL_TAG="${GITHUB_REF_NAME}"
-            REL_TITLE="UMI 数据中心 ${REL_TAG}"
-            gh release view "${REL_TAG}" >/dev/null 2>&1 || \
-              gh release create "${REL_TAG}" --title "${REL_TITLE}" --generate-notes
-            gh release upload "${REL_TAG}" \
-              dist/umi_upload.exe \
-              dist/umi_upload-windows-amd64.zip \
-              dist/SHA256SUMS.txt \
-              --clobber
+          REL_TAG="latest"
+          SHORT_SHA="${GITHUB_SHA::8}"
+          REL_TITLE="UMI 数据中心 (main-${SHORT_SHA})"
+          NOTES_FILE="$(mktemp)"
+          {
+            echo "自动构建自 `main` 分支提交 `${SHORT_SHA}`。"
+            echo ""
+            echo "### SHA-256"
+            echo ' ```text'
+            cat dist/SHA256SUMS.txt
+            echo ' ```'
+          } > "${NOTES_FILE}"
+
+          if gh release view "${REL_TAG}" >/dev/null 2>&1; then
+            gh release edit "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
           else
-            REL_TAG="latest"
-            SHORT_SHA="${GITHUB_SHA::8}"
-            REL_TITLE="UMI 数据中心 (main-${SHORT_SHA})"
-            NOTES_FILE="$(mktemp)"
-            {
-              echo "自动构建自 \`main\` 分支提交 \`${SHORT_SHA}\`。"
-              echo ""
-              echo "### SHA-256"
-              echo '```text'
-              cat dist/SHA256SUMS.txt
-              echo '```'
-            } > "${NOTES_FILE}"
-            if gh release view "${REL_TAG}" >/dev/null 2>&1; then
-              gh release edit "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
-            else
-              gh release create "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
-            fi
-            gh release upload "${REL_TAG}" \
-              dist/umi_upload.exe \
-              dist/umi_upload-windows-amd64.zip \
-              dist/SHA256SUMS.txt \
-              --clobber
+            gh release create "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
           fi
+
+          gh release upload "${REL_TAG}" \
+            dist/umi_upload.exe \
+            dist/umi_upload-windows-amd64.zip \
+            dist/SHA256SUMS.txt \
+            --clobber
