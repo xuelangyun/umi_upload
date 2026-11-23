@@ -208,11 +208,24 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 	} else {
 		stopTuner = func() {}
 	}
-	defer func() {
-		stopTuner()
-		if job.UploadLimiter != nil { unregisterUploadLimiter(job.UploadLimiter); job.UploadLimiter = nil }
-		if job.DatasetLimiter != nil { unregisterDatasetLimiter(job.DatasetLimiter); job.DatasetLimiter = nil }
-	}()
+	var cleanupOnce sync.Once
+	cleanupRuntime := func() {
+		cleanupOnce.Do(func() {
+			stopTuner()
+			if job.UploadLimiter != nil {
+				unregisterUploadLimiter(job.UploadLimiter)
+				job.UploadLimiter = nil
+			}
+			if job.DatasetLimiter != nil {
+				unregisterDatasetLimiter(job.DatasetLimiter)
+				job.DatasetLimiter = nil
+			}
+		})
+	}
+	// Keep the job marked running until the tuner is stopped and its global
+	// limiter registrations are removed. Otherwise a new job can start in the
+	// small window before deferred cleanup and have its tuner status overwritten.
+	defer cleanupRuntime()
 
 	var wg sync.WaitGroup
 	for i, r := range recs {
@@ -233,6 +246,7 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 	}
 	PL.Unlock()
 
+	cleanupRuntime()
 	FinishRun(job.RunID, okCount, failCount)
 	now := nowSec()
 	PL.Lock()
