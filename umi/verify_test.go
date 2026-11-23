@@ -77,6 +77,27 @@ func TestRemoteCommitRejectsManifestWithInvalidRevision(t *testing.T) {
 	}
 }
 
+func TestRemoteCommitRejectsUnsupportedManifestSchema(t *testing.T) {
+	manifestBytes := []byte(`{"schema_version":99,"dataset_id":"dataset","capture_date":"2026-11-23","dataset_type":"test","files":[],"revision":"raw-test","created_at":"2026-11-23T00:00:00.000Z"}`)
+	sum := sha256.Sum256(manifestBytes)
+	marker := ReadyMarker{
+		SchemaVersion:  1,
+		Revision:       "raw-test",
+		ManifestSHA256: hex.EncodeToString(sum[:]),
+	}
+	markerBytes, err := jsonMarshalNoEscape(marker, "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &verifyFakeOSS{objects: map[string][]byte{
+		"oss://test/dataset/manifest.json": manifestBytes,
+		"oss://test/dataset/_READY":         markerBytes,
+	}}
+	if _, err := RemoteCommit(fake, "oss://test/dataset/"); err == nil {
+		t.Fatal("RemoteCommit accepted an unsupported manifest schema")
+	}
+}
+
 func TestVerifyOneRejectsMismatchedReadyManifest(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
