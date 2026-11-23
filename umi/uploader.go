@@ -391,7 +391,9 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 			AddProgressSent(ctx, it.Size)
 		} else {
 			uerr := oss.UploadFile(it.Path, keyPrefix+it.Rel, it.Size, ckptSubDir, func(delta int64) {
-				AddSent(ctx, delta)
+				AddProgressSent(ctx, delta)
+			}, func(delta int64) {
+				AddNetworkTraffic(ctx, delta)
 			})
 			if uerr != nil {
 				errMu.Lock()
@@ -579,7 +581,9 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 					AddProgressSent(ctx, item.Size)
 				} else {
 					uerr := oss.UploadFile(item.Path, keyPrefix+item.Rel, item.Size, ckptSubDir, func(delta int64) {
-						AddSent(ctx, delta)
+						AddProgressSent(ctx, delta)
+					}, func(delta int64) {
+						AddNetworkTraffic(ctx, delta)
 					})
 					if uerr != nil {
 						errMu.Lock()
