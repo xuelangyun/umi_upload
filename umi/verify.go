@@ -83,6 +83,15 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	bad := []string{}
 	manifestDiff := []string{}
 	if ready {
+		if commit.Manifest.DatasetID != ds.Name {
+			manifestDiff = append(manifestDiff, "dataset_id")
+		}
+		if commit.Manifest.CaptureDate != ds.CaptureDate {
+			manifestDiff = append(manifestDiff, "capture_date")
+		}
+		if commit.Manifest.DatasetType != ds.Type {
+			manifestDiff = append(manifestDiff, "dataset_type")
+		}
 		manifestFiles := make(map[string]int64, len(commit.Manifest.Files))
 		for _, f := range commit.Manifest.Files {
 			manifestFiles[f.Path] = f.Size
