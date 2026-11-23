@@ -4,6 +4,8 @@ on:
   pull_request:
     branches: [main]
 
+# Keep CI focused on the essential compile and package tests.
+
 permissions:
   contents: read
 
