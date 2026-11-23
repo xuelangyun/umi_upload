@@ -12,6 +12,7 @@ type CheckResult struct {
 	Extra       []string `json:"extra"`
 	SizeDiff    []string `json:"size_diff"`
 	HashDiff    []string `json:"hash_diff"`
+	ManifestDiff []string `json:"manifest_diff"`
 	Ready       bool     `json:"ready"`
 	Revision    string   `json:"revision"`
 	Deep        bool     `json:"deep"`
@@ -80,6 +81,24 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	}
 
 	bad := []string{}
+	manifestDiff := []string{}
+	if ready {
+		manifestFiles := make(map[string]int64, len(commit.Manifest.Files))
+		for _, f := range commit.Manifest.Files {
+			manifestFiles[f.Path] = f.Size
+		}
+		for name, size := range local {
+			if manifestSize, ok := manifestFiles[name]; !ok || manifestSize != size {
+				manifestDiff = append(manifestDiff, name)
+			}
+		}
+		for name := range manifestFiles {
+			if _, ok := local[name]; !ok {
+				manifestDiff = append(manifestDiff, name)
+			}
+		}
+		sort.Strings(manifestDiff)
+	}
 	if deep && ready {
 		remoteHash := make(map[string]string, len(commit.Manifest.Files))
 		for _, f := range commit.Manifest.Files {
@@ -111,7 +130,7 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	status := "一致"
 	if len(remote) == 0 {
 		status = "未上传"
-	} else if len(missing) > 0 || len(extra) > 0 || len(diff) > 0 || len(bad) > 0 {
+	} else if len(missing) > 0 || len(extra) > 0 || len(diff) > 0 || len(bad) > 0 || len(manifestDiff) > 0 {
 		status = "不一致"
 	} else if !ready {
 		status = "缺_READY"
@@ -132,6 +151,7 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 		Extra:       cap20(extra),
 		SizeDiff:    cap20(diff),
 		HashDiff:    cap20(bad),
+		ManifestDiff: cap20(manifestDiff),
 		Ready:       ready,
 		Revision:    revision,
 		Deep:        deep,
