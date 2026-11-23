@@ -185,6 +185,11 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 
 func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string) {
 	c = ApplyCfg()
+	if action == "upload" {
+		// Do not carry automatic concurrency discovered by the previous job
+		// into a new upload run; start from this run's saved baseline.
+		ResetRuntimeTuning(c)
+	}
 	workers := 1
 	if action != "verify_deep" {
 		if n, err := strconv.Atoi(c["ds_jobs"]); err == nil && n > 1 { workers = n }
