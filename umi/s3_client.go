@@ -221,17 +221,17 @@ func (c *S3CompatibleClient) ListObjects(uriPrefix string) ([]RemoteObj, error) 
 	return result, nil
 }
 
-type s3ProgressReader struct {
-	r       io.Reader
+// s3ProgressHook is consumed by minio-go while it reads request bodies.
+// It measures bytes handed to the HTTP transport, not bytes read ahead from disk.
+type s3ProgressHook struct {
 	onDelta func(int64)
 }
 
-func (r *s3ProgressReader) Read(p []byte) (int, error) {
-	n, err := r.r.Read(p)
-	if n > 0 && r.onDelta != nil {
-		r.onDelta(int64(n))
+func (r *s3ProgressHook) Read(p []byte) (int, error) {
+	if len(p) > 0 && r.onDelta != nil {
+		r.onDelta(int64(len(p)))
 	}
-	return n, err
+	return len(p), nil
 }
 
 func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ string, onDelta func(int64)) error {
@@ -259,22 +259,23 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 		}
 		defer f.Close()
 
-		reader := &s3ProgressReader{
-			r: f,
-			onDelta: func(n int64) {
-				progressMu.Lock()
-				reported += n
-				progressMu.Unlock()
-				if onDelta != nil {
-					onDelta(n)
-				}
-			},
+		progress := func(n int64) {
+			if n <= 0 {
+				return
+			}
+			progressMu.Lock()
+			reported += n
+			progressMu.Unlock()
+			if onDelta != nil {
+				onDelta(n)
+			}
 		}
 
 		opts := minio.PutObjectOptions{
 			PartSize:             uint64(PartSize),
 			NumThreads:            uint(parallel),
 			DisableContentSha256: true,
+			Progress:              &s3ProgressHook{onDelta: progress},
 		}
 		uploadSize := size
 		if size >= MultipartThreshold {
@@ -283,7 +284,7 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 			uploadSize = -1
 			opts.ConcurrentStreamParts = true
 		}
-		_, putErr := c.client.PutObject(AppCtx, c.params.Bucket, key, reader, uploadSize, opts)
+		_, putErr := c.client.PutObject(AppCtx, c.params.Bucket, key, f, uploadSize, opts)
 		if putErr != nil {
 			rollbackProgress()
 			return normalizeS3Error(putErr)
