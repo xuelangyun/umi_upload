@@ -112,6 +112,8 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 }
 func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
 	oldParallel := runtimeParallel.Load()
+	oldActiveCfg := ActiveCfg()
+	defer setActiveCfg(oldActiveCfg)
 	runtimeConfigMu.Lock()
 	oldApplied := runtimeAppliedCfg
 	runtimeAppliedCfg = nil
