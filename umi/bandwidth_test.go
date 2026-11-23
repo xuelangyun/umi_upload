@@ -110,6 +110,31 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	ApplyRuntimeConfig(updated)
 	if got := CurrentUploadParallel(4); got != 5 { t.Fatalf("parallel after lowering max_parallel = %d, want 5", got) }
 }
+func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
+	oldParallel := runtimeParallel.Load()
+	runtimeConfigMu.Lock()
+	oldApplied := runtimeAppliedCfg
+	runtimeAppliedCfg = nil
+	runtimeConfigMu.Unlock()
+	defer func() {
+		runtimeParallel.Store(oldParallel)
+		runtimeConfigMu.Lock()
+		runtimeAppliedCfg = oldApplied
+		runtimeConfigMu.Unlock()
+	}()
+
+	cfg := map[string]string{
+		"jobs": "5", "ds_jobs": "2", "parallel": "4",
+		"max_jobs": "20", "max_parallel": "12",
+	}
+	ApplyRuntimeConfig(cfg)
+	runtimeParallel.Store(9)
+	ResetRuntimeTuning(cfg)
+	if got := CurrentUploadParallel(1); got != 4 {
+		t.Fatalf("new upload inherited tuned parallel %d, want configured baseline 4", got)
+	}
+}
+
 func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
 	l := NewDynamicLimiter(1)
 	ctx, cancel := context.WithCancel(context.Background())
