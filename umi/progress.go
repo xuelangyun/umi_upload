@@ -195,7 +195,10 @@ func AddSent(ctx *JobContext, n int64) {
 	}
 	p.Sent = next
 	PL.Unlock()
-	if ctx.Parent != nil && ctx.Parent.M != nil {
+	// Progress may be rolled back after a failed attempt. Keep the throughput
+	// meter monotonic so it measures transmitted request-body bytes, including
+	// retries, rather than net logical file progress.
+	if n > 0 && ctx.Parent != nil && ctx.Parent.M != nil {
 		ctx.Parent.M.Add(n)
 	}
 }
