@@ -185,6 +185,62 @@ func configFloat(cfg map[string]string, key string, fallback float64) float64 {
 
 // StartBandwidthTuner adjusts only future file admissions and future multipart
 // requests. It never cancels an in-flight object upload or changes commit order.
+type bandwidthTuneDecision struct {
+	fileLimit int
+	parallel  int
+	state     string
+	reason    string
+	action    string
+}
+
+// decideBandwidthTune contains the tuner policy without side effects so its
+// thresholds and concurrency ceilings can be tested independently.
+func decideBandwidthTune(enabled bool, targetMbps, speedMbps float64, active, fileLimit, parallel, maxFiles, maxParallel int) bandwidthTuneDecision {
+	d := bandwidthTuneDecision{
+		fileLimit: fileLimit,
+		parallel:  parallel,
+		state:     "holding",
+		reason:    "当前吞吐已接近目标，保持并发",
+	}
+	if !enabled {
+		d.state, d.reason = "manual", "自动调优已关闭，使用手动配置"
+		return d
+	}
+	if active == 0 {
+		d.state, d.reason = "waiting", "等待实际文件上传，暂不调整并发"
+		return d
+	}
+	if target > 0 && speedMbps >= target*0.95 {
+		return d
+	}
+	if active >= fileLimit && fileLimit < maxFiles {
+		next := fileLimit + 2
+		if next > maxFiles {
+			next = maxFiles
+		}
+		d.fileLimit = next
+		d.state = "increasing-files"
+		d.reason = "上传任务已占满并发槽，增加文件级并发"
+		d.action = "files"
+		return d
+	}
+	if parallel < maxParallel {
+		d.parallel = parallel + 1
+		d.state = "increasing-parts"
+		d.reason = "提高后续视频的分片并发，补足文件任务数量不足"
+		d.action = "parts"
+		return d
+	}
+	if active < fileLimit {
+		d.state, d.reason = "task-limited", "可用上传文件不足，且分片并发已达到上限"
+		return d
+	}
+	d.state, d.reason = "limit-reached", "已达到配置的最大并发，可能受线路、OSS、磁盘或 CPU 限制"
+	return d
+}
+
+// StartBandwidthTuner adjusts only future file admissions and future multipart
+// requests. It never cancels an in-flight object upload or changes commit order.
 func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 	if job == nil || job.Action != "upload" || job.UploadLimiter == nil {
 		return func() {}
@@ -219,39 +275,20 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				speed := job.M.Speed() * 8 / 1e6
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
-				state, reason := "holding", "当前吞吐已接近目标，保持并发"
+				decision := decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
 
-				if !enabled {
-					state, reason = "manual", "自动调优已关闭，使用手动配置"
-				} else if active == 0 {
-					state, reason = "waiting", "等待实际文件上传，暂不调整并发"
-				} else if target <= 0 || speed < target*0.95 {
-					if active >= currentLimit && currentLimit < maxFiles {
-						next := currentLimit + 2
-						if next > maxFiles { next = maxFiles }
-						job.UploadLimiter.SetLimit(next)
-						currentLimit = next
-						reason = "上传任务已占满并发槽，增加文件级并发"
-						state = "increasing-files"
-						JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", currentLimit, speed, target))
-					} else if parallel < maxParallel {
-						parallel++
-						runtimeParallel.Store(int64(parallel))
-						reason = "提高后续视频的分片并发，补足文件任务数量不足"
-						state = "increasing-parts"
-						JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", parallel, speed, target))
-					} else if active < currentLimit {
-						reason = "可用上传文件不足，且分片并发已达到上限"
-						state = "task-limited"
-					} else {
-						reason = "已达到配置的最大并发，可能受线路、OSS、磁盘或 CPU 限制"
-						state = "limit-reached"
-					}
+				switch decision.action {
+				case "files":
+					job.UploadLimiter.SetLimit(decision.fileLimit)
+					JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", decision.fileLimit, speed, target))
+				case "parts":
+					runtimeParallel.Store(int64(decision.parallel))
+					JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", decision.parallel, speed, target))
 				}
 				setBandwidthTuneStatus(BandwidthTuneStatus{
 					Enabled: enabled, TargetMbps: target, CurrentMbps: speed,
-					ActiveFiles: active, FileLimit: currentLimit, Parallel: parallel,
-					MaxFiles: maxFiles, State: state, Reason: reason,
+					ActiveFiles: active, FileLimit: decision.fileLimit, Parallel: decision.parallel,
+					MaxFiles: maxFiles, State: decision.state, Reason: decision.reason,
 				})
 			}
 		}
