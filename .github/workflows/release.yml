@@ -54,8 +54,8 @@ jobs:
             --title "${REL_TITLE}" \
             --notes "自动构建自 main 分支提交 ${SHORT_SHA}。包含 Windows AMD64 和 Linux AMD64 版本。"
 
-          gh release list --limit 100 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[2:][] | .tagName' |
+          gh release list --limit 100 --json tagName,publishedAt \
+            --jq 'sort_by(.publishedAt) | reverse | .[2:][] | .tagName' |
           while IFS= read -r old_tag; do
             [ -n "${old_tag}" ] || continue
             gh release delete "${old_tag}" --yes --cleanup-tag
