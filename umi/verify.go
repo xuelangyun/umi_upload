@@ -137,7 +137,7 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	}
 
 	status := "一致"
-	if len(remote) == 0 {
+	if len(remote) == 0 && !ready {
 		status = "未上传"
 	} else if len(missing) > 0 || len(extra) > 0 || len(diff) > 0 || len(bad) > 0 || len(manifestDiff) > 0 {
 		status = "不一致"
