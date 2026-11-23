@@ -347,6 +347,8 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				case "files":
 					runtimeConfigMu.Lock()
 					latestCfg := ActiveCfg()
+					enabled = configBool(latestCfg, "auto_tune", true)
+					target = configFloat(latestCfg, "target_mbps", 350)
 					if !tuneActionAllowed(latestCfg, speed) {
 						runtimeConfigMu.Unlock()
 						if !configBool(latestCfg, "auto_tune", true) {
@@ -371,6 +373,8 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				case "parts":
 					runtimeConfigMu.Lock()
 					latestCfg := ActiveCfg()
+					enabled = configBool(latestCfg, "auto_tune", true)
+					target = configFloat(latestCfg, "target_mbps", 350)
 					if !tuneActionAllowed(latestCfg, speed) {
 						runtimeConfigMu.Unlock()
 						if !configBool(latestCfg, "auto_tune", true) {
