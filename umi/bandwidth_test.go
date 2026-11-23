@@ -161,6 +161,30 @@ func TestHashFileStopsWhenStopSignalIsClosed(t *testing.T) {
 	}
 }
 
+func TestOSSResumeProgressIsNotCountedAsCurrentTraffic(t *testing.T) {
+	if !isOSSResumeProgress(20, 20, 20) {
+		t.Fatal("checkpoint resume callback must be identified")
+	}
+	if isOSSResumeProgress(20, 10, 30) {
+		t.Fatal("a newly completed part must count as current traffic")
+	}
+	if isOSSResumeProgress(0, 10, 10) {
+		t.Fatal("a fresh upload's first part must count as current traffic")
+	}
+}
+
+func TestAddNetworkTrafficDoesNotChangeLogicalProgress(t *testing.T) {
+	job := &Job{M: NewMeter()}
+	ctx := &JobContext{Parent: job, Prog: ProgState{Total: 100}}
+	AddNetworkTraffic(ctx, 50)
+	if ctx.Prog.Sent != 0 {
+		t.Fatalf("network-only bytes changed logical progress to %d", ctx.Prog.Sent)
+	}
+	if got := job.M.Total(); got != 50 {
+		t.Fatalf("network meter total = %d, want 50", got)
+	}
+}
+
 func TestS3ProgressHookReportsRequestBodyBytes(t *testing.T) {
 	var reported int64
 	hook := &s3ProgressHook{onDelta: func(n int64) { reported += n }}
