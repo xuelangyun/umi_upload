@@ -115,6 +115,8 @@ func TestMakeManifestRejectsInvalidLocalFiles(t *testing.T) {
 			{Path: "file", Size: 1, SHA256: validHash},
 		}},
 		{name: "path traversal", files: []ManifestFile{{Path: "../file", Size: 1, SHA256: validHash}}},
+		{name: "empty inventory", files: nil},
+		{name: "unsafe query character", files: []ManifestFile{{Path: "file?x", Size: 1, SHA256: validHash}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
