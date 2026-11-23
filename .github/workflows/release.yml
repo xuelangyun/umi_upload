@@ -2,70 +2,61 @@ name: Build & Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# Prevent overlapping builds from publishing stale packages to the latest release.
 concurrency:
-  group: umi-upload-latest-release
+  group: umi-upload-release
   cancel-in-progress: true
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
-      - name: Build package
-        run: go run scripts/package_release.go -out dist
+      - name: Build Windows and Linux packages
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          VERSION="build-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
+          go run scripts/package_release.go -out dist -version "${VERSION}"
 
-      - name: Upload temporary build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: umi_upload-windows-amd64
-          path: |
-            dist/umi_upload.exe
-            dist/umi_upload-windows-amd64.zip
-            dist/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 1
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -trimpath -ldflags "-s -w -X main.Version=${VERSION}" \
+            -o dist/umi_upload-linux-amd64 .
 
-      - name: Publish latest release
+          cd dist
+          zip -q umi_upload-linux-amd64.zip umi_upload-linux-amd64
+          sha256sum umi_upload.exe umi_upload-windows-amd64.zip \
+            umi_upload-linux-amd64 umi_upload-linux-amd64.zip > SHA256SUMS.txt
+
+      - name: Publish release and keep the latest 2
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          REL_TAG="latest"
           SHORT_SHA="${GITHUB_SHA::8}"
-          REL_TITLE="UMI 数据中心 (main-${SHORT_SHA})"
-          NOTES_FILE="$(mktemp)"
-          {
-            echo "自动构建自 `main` 分支提交 `${SHORT_SHA}`。"
-            echo ""
-            echo "### SHA-256"
-            echo '```text'
-            cat dist/SHA256SUMS.txt
-            echo '```'
-          } > "${NOTES_FILE}"
+          REL_TAG="build-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
+          REL_TITLE="UMI 数据中心 (${REL_TAG})"
 
-          if gh release view "${REL_TAG}" >/dev/null 2>&1; then
-            gh release edit "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
-          else
-            gh release create "${REL_TAG}" --title "${REL_TITLE}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}"
-          fi
-
-          gh release upload "${REL_TAG}" \
+          gh release create "${REL_TAG}" \
             dist/umi_upload.exe \
             dist/umi_upload-windows-amd64.zip \
+            dist/umi_upload-linux-amd64 \
+            dist/umi_upload-linux-amd64.zip \
             dist/SHA256SUMS.txt \
-            --clobber
+            --title "${REL_TITLE}" \
+            --notes "自动构建自 main 分支提交 ${SHORT_SHA}。包含 Windows AMD64 和 Linux AMD64 版本。"
+
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[2:][] | .tagName' |
+          while IFS= read -r old_tag; do
+            [ -n "${old_tag}" ] || continue
+            gh release delete "${old_tag}" --yes --cleanup-tag
+          done
