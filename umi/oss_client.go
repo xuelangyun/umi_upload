@@ -491,7 +491,7 @@ func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string, 
 	}
 
 	partSize := PartSize
-	for size/partSize >= int64(oss.MaxUploadParts) {
+	for info.Size()/partSize >= int64(oss.MaxUploadParts) {
 		partSize += PartSize
 	}
 	objectName := "oss://" + c.params.Bucket + "/" + key
@@ -511,7 +511,6 @@ func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string, 
 		if cp.Magic != oss.CheckpointMagic ||
 			cp.Data.FilePath != localPath ||
 			cp.Data.FileMeta.Size != info.Size() ||
-			cp.Data.FileMeta.Size != size ||
 			cp.Data.FileMeta.LastModified != info.ModTime().String() ||
 			cp.Data.ObjectInfo.Name != objectName ||
 			cp.Data.PartSize != partSize ||
