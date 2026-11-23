@@ -186,3 +186,24 @@ func TestDecideBandwidthTune(t *testing.T) {
 		})
 	}
 }
+
+
+// TestMeterHasRecentActivityPreventsStaleThroughputTuning verifies that a
+// previously active transfer is not mistaken for current upload activity.
+func TestMeterHasRecentActivityPreventsStaleThroughputTuning(t *testing.T) {
+	m := NewMeter()
+	if m.HasRecentActivity(10 * time.Second) {
+		t.Fatal("new meter must not report upload activity")
+	}
+	m.Add(1024)
+	if !m.HasRecentActivity(10 * time.Second) {
+		t.Fatal("recently acknowledged bytes must count as upload activity")
+	}
+
+	m.mu.Lock()
+	m.q[len(m.q)-1].t = nowSec() - 20
+	m.mu.Unlock()
+	if m.HasRecentActivity(10 * time.Second) {
+		t.Fatal("stale upload activity must not be treated as current")
+	}
+}
