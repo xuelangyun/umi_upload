@@ -36,7 +36,7 @@ func OpenInFileManager(p string, isDir bool) error {
 		if err != nil {
 			return fmt.Errorf("转换资源管理器程序路径失败：%w", err)
 		}
-		params, err = syscall.UTF16PtrFromString(fmt.Sprintf("/select,"%s"", p))
+		params, err = syscall.UTF16PtrFromString(fmt.Sprintf("/select,\\"%s\\"", p))
 		if err != nil {
 			return fmt.Errorf("转换选中文件参数失败：%w", err)
 		}
