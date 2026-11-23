@@ -71,9 +71,10 @@ var (
 	runtimeParallel atomic.Int64
 	runtimeTuneMu sync.RWMutex
 	activeUploadLimiter *DynamicLimiter
+	activeDatasetLimiter *DynamicLimiter
 )
 
-func init() { runtimeParallel.Store(4) }
+func init() {}
 
 // CurrentUploadParallel is read for every new object upload, so a changed
 // parallel setting affects subsequent files without rebuilding the OSS client.
@@ -95,9 +96,26 @@ func ApplyRuntimeConfig(cfg map[string]string) {
 	runtimeTuneMu.RLock()
 	limiter := activeUploadLimiter
 	runtimeTuneMu.RUnlock()
-	if limiter != nil {
-		limiter.SetLimit(jobs * dsJobs)
-	}
+	maxParallel := configInt(cfg, "max_parallel", 12)
+	if parallel > maxParallel { parallel = maxParallel }
+	runtimeParallel.Store(int64(parallel))
+	if limiter != nil { limiter.SetLimit(min(jobs*dsJobs, configInt(cfg, "max_jobs", 48))) }
+	runtimeTuneMu.RLock()
+	dsLimiter := activeDatasetLimiter
+	runtimeTuneMu.RUnlock()
+	if dsLimiter != nil { dsLimiter.SetLimit(dsJobs) }
+}
+
+func registerDatasetLimiter(l *DynamicLimiter) {
+	runtimeTuneMu.Lock()
+	activeDatasetLimiter = l
+	runtimeTuneMu.Unlock()
+}
+
+func unregisterDatasetLimiter(l *DynamicLimiter) {
+	runtimeTuneMu.Lock()
+	if activeDatasetLimiter == l { activeDatasetLimiter = nil }
+	runtimeTuneMu.Unlock()
 }
 
 func registerUploadLimiter(l *DynamicLimiter) {
@@ -198,7 +216,7 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 				reason := "当前吞吐已接近目标，保持并发"
 				state := "holding"
 
-				if target > 0 && speed < target*0.95 {
+				if target <= 0 || speed < target*0.95 {
 					if active >= currentLimit && currentLimit < maxFiles {
 						next := currentLimit + 2
 						if next > maxFiles { next = maxFiles }
@@ -206,13 +224,13 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 						currentLimit = next
 						reason = "上传任务已占满并发槽，增加文件级并发"
 						state = "increasing-files"
-					} else if active >= currentLimit && parallel < maxParallel {
+					} else if parallel < maxParallel {
 						parallel++
 						runtimeParallel.Store(int64(parallel))
-						reason = "文件并发已到上限或饱和，增加后续视频的分片并发"
+						reason = "提高后续视频的分片并发，补足文件任务数量不足"
 						state = "increasing-parts"
 					} else if active < currentLimit {
-						reason = "当前待上传任务不足，无法通过增加并发提升带宽"
+						reason = "可用上传文件不足，且分片并发已达到上限"
 						state = "task-limited"
 					} else {
 						reason = "已达到配置的最大并发，可能受线路、OSS、磁盘或 CPU 限制"
