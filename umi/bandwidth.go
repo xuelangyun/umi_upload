@@ -233,3 +233,10 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 		setBandwidthTuneStatus(BandwidthTuneStatus{State:"idle"})
 	}
 }
+
+func uploadLimiterFor(ctx *JobContext, fallback int) *DynamicLimiter {
+	if ctx != nil && ctx.Parent != nil && ctx.Parent.UploadLimiter != nil {
+		return ctx.Parent.UploadLimiter
+	}
+	return NewDynamicLimiter(fallback)
+}
