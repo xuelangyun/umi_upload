@@ -34,7 +34,7 @@ async function removeRoot(p) {
 }
 
 /* ---- OSS 配置 ---- */
-const CFG_FIELDS = ['storage_type', 'endpoint', 'bucket', 'bucket_umi', 'ak', 'sk', 'ds_jobs', 'jobs', 'parallel', 'wan', 'net_wait'];
+const CFG_FIELDS = ['storage_type', 'endpoint', 'bucket', 'bucket_umi', 'ak', 'sk', 'ds_jobs', 'jobs', 'parallel', 'wan', 'net_wait', 'target_mbps', 'auto_tune', 'max_jobs', 'max_parallel'];
 /* 多出口并发：按出口数给建议，并估算当前设置能有多少条并发连接（公式在后端 umi/nettune.py，页面不重复定义） */
 async function refreshNet() {
   const q = new URLSearchParams({wan: $('c_wan').value || 1, ds_jobs: $('c_ds_jobs').value || 2, parallel: $('c_parallel').value || 4});
@@ -58,6 +58,11 @@ async function reloadConfigForm() {
     `<option value="${esc(x.id)}">${esc(x.name)}${x.active ? '（当前生效）' : ''}</option>`).join('');
   $('c_profile_select').value = p.active_profile_id || '';
   $('cmsg').textContent = ''; $('cmsg').style.color = '';
+  try {
+    const b = await (await fetch('/api/bandwidth')).json();
+    $('c_bandwidth_status').textContent = b.state === 'idle' ? '调优状态：空闲（上传任务开始后运行）'
+      : `调优状态：${b.state} · 当前 ${Number(b.current_mbps || 0).toFixed(1)} Mbps / 目标 ${b.target_mbps} Mbps · 文件并发 ${b.active_files}/${b.file_limit} · 分片并发 ${b.parallel} · ${b.reason || ''}`;
+  } catch (_) { $('c_bandwidth_status').textContent = '调优状态暂不可用'; }
   return c;
 }
 async function openConfig() {
