@@ -100,16 +100,29 @@ func CurrentUploadParallel(fallback int) int {
 // It is intentionally separate from ApplyRuntimeConfig, which preserves tuner
 // discoveries when unrelated settings are saved during an active job.
 func ResetRuntimeTuning(cfg map[string]string) {
+	ApplyActiveRuntimeConfig(cfg, true)
+}
+
+// ApplyActiveRuntimeConfig publishes the configuration and updates runtime
+// limiters under the same lock used by the tuner. This prevents a tuner from
+// observing a new config snapshot halfway through its own decision.
+func ApplyActiveRuntimeConfig(cfg map[string]string, resetTuning bool) {
 	runtimeConfigMu.Lock()
-	runtimeAppliedCfg = nil
-	runtimeConfigMu.Unlock()
-	ApplyRuntimeConfig(cfg)
+	defer runtimeConfigMu.Unlock()
+	setActiveCfg(cfg)
+	if resetTuning {
+		runtimeAppliedCfg = nil
+	}
+	applyRuntimeConfigLocked(cfg)
 }
 
 func ApplyRuntimeConfig(cfg map[string]string) {
 	runtimeConfigMu.Lock()
 	defer runtimeConfigMu.Unlock()
+	applyRuntimeConfigLocked(cfg)
+}
 
+func applyRuntimeConfigLocked(cfg map[string]string) {
 	previous := runtimeAppliedCfg
 	parallelChanged := previous == nil ||
 		previous["parallel"] != cfg["parallel"] ||
