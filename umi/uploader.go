@@ -457,20 +457,24 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		wg.Wait()
 	} else {
 		for gi, g := range groups {
+			if firstErr != nil { break }
 			var wg sync.WaitGroup
 			for _, idx := range g.Indices {
+				if err := limiter.Acquire(AppCtx); err != nil {
+					errMu.Lock()
+					if firstErr == nil { firstErr = err }
+					errMu.Unlock()
+					break
+				}
 				wg.Add(1)
-				sem <- struct{}{}
 				go func(groupI, itemI int) {
 					defer wg.Done()
-					defer func() { <-sem }()
+					defer limiter.Release()
 					uploadSingle(groupI, itemI)
 				}(gi, idx)
 			}
 			wg.Wait()
-			if firstErr != nil {
-				break
-			}
+			if firstErr != nil { break }
 		}
 	}
 
