@@ -5,20 +5,19 @@ import (
 )
 
 type CheckResult struct {
-	Status      string   `json:"status"`
-	LocalFiles  int      `json:"local_files"`
-	RemoteFiles int      `json:"remote_files"`
-	Missing     []string `json:"missing"`
-	Extra       []string `json:"extra"`
-	SizeDiff    []string `json:"size_diff"`
-	HashDiff    []string `json:"hash_diff"`
+	Status       string   `json:"status"`
+	LocalFiles   int      `json:"local_files"`
+	RemoteFiles  int      `json:"remote_files"`
+	Missing      []string `json:"missing"`
+	Extra        []string `json:"extra"`
+	SizeDiff     []string `json:"size_diff"`
+	HashDiff     []string `json:"hash_diff"`
 	ManifestDiff []string `json:"manifest_diff"`
-	Ready       bool     `json:"ready"`
-	Revision    string   `json:"revision"`
-	Deep        bool     `json:"deep"`
-	CheckedAt   string   `json:"checked_at"`
+	Ready        bool     `json:"ready"`
+	Revision     string   `json:"revision"`
+	Deep         bool     `json:"deep"`
+	CheckedAt    string   `json:"checked_at"`
 }
-
 func LocalInventory(src string) (map[string]int64, error) {
 	inv, err := Inventory(src)
 	if err != nil {
@@ -153,18 +152,18 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	}
 
 	return &CheckResult{
-		Status:      status,
-		LocalFiles:  len(local),
-		RemoteFiles: len(remote),
-		Missing:     cap20(missing),
-		Extra:       cap20(extra),
-		SizeDiff:    cap20(diff),
-		HashDiff:    cap20(bad),
+		Status:       status,
+		LocalFiles:   len(local),
+		RemoteFiles:  len(remote),
+		Missing:      cap20(missing),
+		Extra:        cap20(extra),
+		SizeDiff:     cap20(diff),
+		HashDiff:     cap20(bad),
 		ManifestDiff: cap20(manifestDiff),
-		Ready:       ready,
-		Revision:    revision,
-		Deep:        deep,
-		CheckedAt:   NowTS(),
+		Ready:        ready,
+		Revision:     revision,
+		Deep:         deep,
+		CheckedAt:    NowTS(),
 	}, nil
 }
 
