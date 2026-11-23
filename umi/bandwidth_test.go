@@ -149,6 +149,21 @@ func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
 }
 
 
+func TestTuneActionAllowedUsesLatestSettings(t *testing.T) {
+	if tuneActionAllowed(map[string]string{"auto_tune": "false", "target_mbps": "350"}, 10) {
+		t.Fatal("disabled auto tuning must reject a pending increase")
+	}
+	if tuneActionAllowed(map[string]string{"auto_tune": "true", "target_mbps": "100"}, 95) {
+		t.Fatal("a newly reached target must reject a stale increase")
+	}
+	if !tuneActionAllowed(map[string]string{"auto_tune": "true", "target_mbps": "100"}, 94) {
+		t.Fatal("an unmet latest target should allow the pending increase")
+	}
+	if !tuneActionAllowed(map[string]string{"auto_tune": "true", "target_mbps": "0"}, 0) {
+		t.Fatal("zero target should retain exploratory tuning")
+	}
+}
+
 func TestDecideBandwidthTune(t *testing.T) {
 	tests := []struct {
 		name string
