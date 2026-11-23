@@ -349,6 +349,10 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					latestCfg := ActiveCfg()
 					enabled = configBool(latestCfg, "auto_tune", true)
 					target = configFloat(latestCfg, "target_mbps", 350)
+					// Re-sample throughput under the same lock that serializes
+					// configuration publication and tuner changes. The sample
+					// computed at the start of this 20-second cycle may be stale.
+					speed = job.M.Speed() * 8 / 1e6
 					if !tuneActionAllowed(latestCfg, speed) {
 						runtimeConfigMu.Unlock()
 						if !configBool(latestCfg, "auto_tune", true) {
@@ -375,6 +379,10 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					latestCfg := ActiveCfg()
 					enabled = configBool(latestCfg, "auto_tune", true)
 					target = configFloat(latestCfg, "target_mbps", 350)
+					// Re-sample throughput under the same lock that serializes
+					// configuration publication and tuner changes. The sample
+					// computed at the start of this 20-second cycle may be stale.
+					speed = job.M.Speed() * 8 / 1e6
 					if !tuneActionAllowed(latestCfg, speed) {
 						runtimeConfigMu.Unlock()
 						if !configBool(latestCfg, "auto_tune", true) {
