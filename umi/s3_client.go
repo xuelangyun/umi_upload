@@ -234,7 +234,7 @@ func (r *s3ProgressHook) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ string, onDelta func(int64)) error {
+func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ string, onProgress, onTraffic func(int64)) error {
 	if size < 0 {
 		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
@@ -247,8 +247,8 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 		n := reported
 		reported = 0
 		progressMu.Unlock()
-		if n > 0 && onDelta != nil {
-			onDelta(-n)
+		if n > 0 && onProgress != nil {
+			onProgress(-n)
 		}
 	}
 	return c.runWithRetry(func() error {
@@ -266,8 +266,11 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 			progressMu.Lock()
 			reported += n
 			progressMu.Unlock()
-			if onDelta != nil {
-				onDelta(n)
+			if onProgress != nil {
+				onProgress(n)
+			}
+			if onTraffic != nil {
+				onTraffic(n)
 			}
 		}
 
@@ -294,8 +297,13 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 		remaining := size - reported
 		reported = size
 		progressMu.Unlock()
-		if remaining > 0 && onDelta != nil {
-			onDelta(remaining)
+		if remaining > 0 {
+			if onProgress != nil {
+				onProgress(remaining)
+			}
+			if onTraffic != nil {
+				onTraffic(remaining)
+			}
 		}
 		return nil
 	})
