@@ -151,3 +151,18 @@ td.vlink{color:var(--ac)}.fold{margin-left:6px;opacity:.65}.fold:hover{opacity:1
 #mc .cfg-retry{grid-column:auto}
 #mc .cfg-hint{font-size:11px}
 @media(max-width:700px){#mc .cfg-grid{grid-template-columns:1fr}#mc .cfg-retry{grid-column:auto}}
+
+/* 主页面独立的动态带宽调优状态条 */
+.bandwidth-card{display:flex;align-items:center;gap:18px;flex:none;margin:0 18px 6px;padding:7px 12px;background:var(--sf);border:1px solid var(--ln);border-left:3px solid var(--ac);border-radius:var(--r);box-shadow:var(--sh);min-width:0}
+.bandwidth-title{display:flex;align-items:center;gap:7px;white-space:nowrap;min-width:170px}
+.bandwidth-dot{width:8px;height:8px;border-radius:50%;background:var(--mu);flex:none}
+.bandwidth-title b{font-size:12px}
+.bw-state{font-size:11px;color:var(--mu);background:var(--s3);border-radius:10px;padding:2px 7px}
+.bw-state.running{color:var(--ok);background:var(--acs)}
+.bw-state.waiting{color:var(--wn);background:var(--wns)}
+.bandwidth-metrics{display:flex;align-items:center;gap:clamp(12px,2.5vw,32px);min-width:0}
+.bandwidth-metrics span{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+.bandwidth-metrics small{font-size:11px;color:var(--mu)}
+.bandwidth-metrics b{font:600 12px var(--mono);font-variant-numeric:tabular-nums}
+.bandwidth-reason{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mu);font-size:11px}
+@media(max-width:900px){.bandwidth-card{gap:10px;flex-wrap:wrap}.bandwidth-title{min-width:100%}.bandwidth-metrics{flex-wrap:wrap;gap:8px 18px}.bandwidth-reason{flex-basis:100%;margin-left:0}}
