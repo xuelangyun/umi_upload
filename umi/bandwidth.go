@@ -272,7 +272,7 @@ func decideBandwidthTune(enabled bool, targetMbps, speedMbps float64, active, fi
 		d.state, d.reason = "waiting", "等待实际文件上传，暂不调整并发"
 		return d
 	}
-	if target > 0 && speedMbps >= target*0.95 {
+	if targetMbps > 0 && speedMbps >= targetMbps*0.95 {
 		return d
 	}
 	if active >= fileLimit && fileLimit < maxFiles {
