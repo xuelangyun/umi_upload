@@ -68,57 +68,45 @@ func VerifyOne(oss OSSClient, ds *DatasetMeta, deep bool, ctx *JobContext) (*Che
 	sort.Strings(extra)
 	sort.Strings(diff)
 
-	rdBytes, ready, err := oss.ReadObject(raw + "_READY")
+	// Treat a dataset as committed only when _READY and manifest.json form
+	// one valid, checksum-matched commit. Merely finding _READY is insufficient.
+	commit, err := RemoteCommit(oss, raw)
 	if err != nil {
 		return nil, err
 	}
+	ready := commit != nil
 	revision := ""
 	if ready {
-		var rm ReadyMarker
-		if json.Unmarshal(rdBytes, &rm) == nil {
-			revision = rm.Revision
-		}
+		revision = commit.Manifest.Revision
 	}
 
 	bad := []string{}
 	if deep && ready {
-		mfBytes, mfFound, err := oss.ReadObject(raw + "manifest.json")
+		remoteHash := make(map[string]string, len(commit.Manifest.Files))
+		for _, f := range commit.Manifest.Files {
+			remoteHash[f.Path] = f.SHA256
+		}
+		var totalBytes int64
+		for _, sz := range local {
+			totalBytes += sz
+		}
+		if ctx != nil {
+			PL.Lock()
+			ctx.Prog.Phase = "深度校验 sha256"
+			ctx.Prog.Total = totalBytes
+			ctx.Prog.Hashed = 0
+			PL.Unlock()
+		}
+		snap, err := Snapshot(ds.Source, 8, ctx)
 		if err != nil {
 			return nil, err
 		}
-		if !mfFound {
-			bad = append(bad, "manifest.json")
-		} else {
-			var mf Manifest
-			if err := json.Unmarshal(mfBytes, &mf); err != nil {
-				return nil, err
+		for _, f := range snap {
+			if remoteHash[f.Path] != f.SHA256 {
+				bad = append(bad, f.Path)
 			}
-			remoteHash := make(map[string]string, len(mf.Files))
-			for _, f := range mf.Files {
-				remoteHash[f.Path] = f.SHA256
-			}
-			var totalBytes int64
-			for _, sz := range local {
-				totalBytes += sz
-			}
-			if ctx != nil {
-				PL.Lock()
-				ctx.Prog.Phase = "深度校验 sha256"
-				ctx.Prog.Total = totalBytes
-				ctx.Prog.Hashed = 0
-				PL.Unlock()
-			}
-			snap, err := Snapshot(ds.Source, 8, ctx)
-			if err != nil {
-				return nil, err
-			}
-			for _, f := range snap {
-				if remoteHash[f.Path] != f.SHA256 {
-					bad = append(bad, f.Path)
-				}
-			}
-			sort.Strings(bad)
 		}
+		sort.Strings(bad)
 	}
 
 	status := "一致"
