@@ -96,6 +96,16 @@ func CurrentUploadParallel(fallback int) int {
 	return 4
 }
 
+// ResetRuntimeTuning starts a fresh upload job from its configured baseline.
+// It is intentionally separate from ApplyRuntimeConfig, which preserves tuner
+// discoveries when unrelated settings are saved during an active job.
+func ResetRuntimeTuning(cfg map[string]string) {
+	runtimeConfigMu.Lock()
+	runtimeAppliedCfg = nil
+	runtimeConfigMu.Unlock()
+	ApplyRuntimeConfig(cfg)
+}
+
 func ApplyRuntimeConfig(cfg map[string]string) {
 	runtimeConfigMu.Lock()
 	defer runtimeConfigMu.Unlock()
