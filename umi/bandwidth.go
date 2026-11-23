@@ -311,19 +311,25 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 	initialActive, initialLimit := job.UploadLimiter.Stats()
 	initialTarget := configFloat(initialCfg, "target_mbps", 350)
 	initialEnabled := configBool(initialCfg, "auto_tune", true)
+	initialState, initialReason := "monitoring", "正在采集上传吞吐"
+	if !initialEnabled {
+		initialState, initialReason = "manual", "动态调优未启用，仅监控实际上传情况"
+	}
 	setBandwidthTuneStatus(BandwidthTuneStatus{
 		Enabled: initialEnabled, TargetMbps: initialTarget,
 		CurrentMbps: job.M.Speed()*8/1e6, ActiveFiles: initialActive,
 		FileLimit: initialLimit, Parallel: CurrentUploadParallel(4),
 		MaxFiles: configInt(initialCfg, "max_jobs", 48),
-		State: "monitoring", Reason: "正在采集上传吞吐",
+		State: initialState, Reason: initialReason,
 	})
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(20 * time.Second)
+		// Refresh live upload usage frequently; keep concurrency tuning on a slower cadence.
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
+		lastTune := time.Now()
 		for {
 			select {
 			case <-stop:
@@ -338,17 +344,30 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
 				var decision bandwidthTuneDecision
-				if shouldWaitForUploadActivity(enabled, job.M.HasRecentActivity(10*time.Second)) {
-					reason := "最近 10 秒没有实际上传字节进度，等待上传活动"
-					if active == 0 {
-						reason = "当前没有活动上传文件，等待上传活动后再调优"
-					}
+				switch {
+				case !enabled:
+					decision = decideBandwidthTune(false, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
+				case time.Since(lastTune) < 20*time.Second:
+					// Keep the displayed throughput and active counts fresh without
+					// increasing concurrency more often than the established cadence.
 					decision = bandwidthTuneDecision{
 						fileLimit: currentLimit, parallel: parallel,
-						state: "waiting", reason: reason,
+						state: "monitoring", reason: "正在采集上传吞吐",
 					}
-				} else {
-					decision = decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
+				default:
+					lastTune = time.Now()
+					if shouldWaitForUploadActivity(enabled, job.M.HasRecentActivity(10*time.Second)) {
+						reason := "最近 10 秒没有实际上传字节进度，等待上传活动"
+						if active == 0 {
+							reason = "当前没有活动上传文件，等待上传活动后再调优"
+						}
+						decision = bandwidthTuneDecision{
+							fileLimit: currentLimit, parallel: parallel,
+							state: "waiting", reason: reason,
+						}
+					} else {
+						decision = decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
+					}
 				}
 
 				switch decision.action {
