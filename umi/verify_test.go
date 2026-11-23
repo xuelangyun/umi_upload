@@ -201,6 +201,31 @@ func TestVerifyOneRejectsMismatchedReadyManifest(t *testing.T) {
 	}
 }
 
+func TestVerifyOneFlagsMissingRemoteObjectsWhenReadyExists(t *testing.T) {
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake := fakeCommittedManifest(t, Manifest{
+		SchemaVersion: 1,
+		DatasetID: "dataset",
+		CaptureDate: "2026-11-23",
+		DatasetType: "test",
+		Files: []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: strings.Repeat("a", 64)}},
+		CreatedAt: "2026-11-23T00:00:00.000Z",
+	})
+	result, err := VerifyOne(fake, &DatasetMeta{
+		Name: "dataset", CaptureDate: "2026-11-23", Type: "test",
+		Source: src, RawURI: "oss://test/dataset/",
+	}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "不一致" || len(result.Missing) != 1 {
+		t.Fatalf("missing remote objects were hidden by empty inventory: status=%q missing=%v", result.Status, result.Missing)
+	}
+}
+
 func TestVerifyOneDetectsManifestInventoryMismatchWithoutDeepHash(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
