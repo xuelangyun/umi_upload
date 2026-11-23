@@ -436,14 +436,32 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 	}
 
 	limiter := uploadLimiterFor(ctx, jobsN)
+	shouldStopScheduling := func() bool {
+		errMu.Lock()
+		failed := firstErr != nil
+		errMu.Unlock()
+		return failed || AppCtx.Err() != nil
+	}
 	if order == "pipeline" {
 		var wg sync.WaitGroup
 		for gi, g := range groups {
+			if shouldStopScheduling() {
+				break
+			}
 			for _, idx := range g.Indices {
+				if shouldStopScheduling() {
+					break
+				}
 				if err := limiter.Acquire(AppCtx); err != nil {
 					errMu.Lock()
 					if firstErr == nil { firstErr = err }
 					errMu.Unlock()
+					break
+				}
+				// A previous upload may have failed while Acquire was waiting.
+				// Release the slot instead of scheduling a no-op goroutine.
+				if shouldStopScheduling() {
+					limiter.Release()
 					break
 				}
 				wg.Add(1)
@@ -457,13 +475,18 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		wg.Wait()
 	} else {
 		for gi, g := range groups {
-			if firstErr != nil { break }
+			if shouldStopScheduling() { break }
 			var wg sync.WaitGroup
 			for _, idx := range g.Indices {
+				if shouldStopScheduling() { break }
 				if err := limiter.Acquire(AppCtx); err != nil {
 					errMu.Lock()
 					if firstErr == nil { firstErr = err }
 					errMu.Unlock()
+					break
+				}
+				if shouldStopScheduling() {
+					limiter.Release()
 					break
 				}
 				wg.Add(1)
