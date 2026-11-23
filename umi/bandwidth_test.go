@@ -83,6 +83,14 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	if fileLimit != 15 { t.Fatalf("file limit = %d, want 15", fileLimit) }
 	if datasetLimit != 3 { t.Fatalf("dataset limit = %d, want 3", datasetLimit) }
 	if got := CurrentUploadParallel(4); got != 7 { t.Fatalf("parallel = %d, want 7", got) }
+
+	// A lower max_parallel must take effect immediately for subsequent uploads,
+	// even when the saved manual parallel value is higher.
+	ApplyRuntimeConfig(map[string]string{
+		"jobs": "5", "ds_jobs": "3", "parallel": "7",
+		"max_jobs": "20", "max_parallel": "5",
+	})
+	if got := CurrentUploadParallel(4); got != 5 { t.Fatalf("parallel after lowering max_parallel = %d, want 5", got) }
 }
 
 func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
