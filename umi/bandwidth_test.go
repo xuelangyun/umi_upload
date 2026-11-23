@@ -2,6 +2,10 @@ package umi
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"context"
 	"testing"
 	"time"
 )
@@ -142,6 +146,19 @@ func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
 	}
 	if got := CurrentUploadParallel(1); got != 4 {
 		t.Fatalf("new upload inherited tuned parallel %d, want configured baseline 4", got)
+	}
+}
+
+func TestHashFileStopsWhenStopSignalIsClosed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "large.bin")
+	if err := os.WriteFile(path, make([]byte, 8*1024*1024), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stop := make(chan struct{})
+	close(stop)
+	if _, err := hashFileWithStop(path, nil, stop); !errors.Is(err, context.Canceled) {
+		t.Fatalf("hashFileWithStop error = %v, want context.Canceled", err)
 	}
 }
 
