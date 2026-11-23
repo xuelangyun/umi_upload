@@ -892,7 +892,15 @@ func NewHandler(webFS fs.FS) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/api/bandwidth", func(w http.ResponseWriter, r *http.Request) {\n\t\tif r.Method != http.MethodGet { writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"}); return }\n\t\twriteJSON(w, http.StatusOK, CurrentBandwidthTuneStatus())\n\t})\n\n	mux.HandleFunc("/api/net/plan", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/bandwidth", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, CurrentBandwidthTuneStatus())
+	})
+
+	mux.HandleFunc("/api/net/plan", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 			return
