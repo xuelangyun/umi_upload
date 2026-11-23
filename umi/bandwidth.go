@@ -196,6 +196,7 @@ type BandwidthTuneStatus struct {
 	MaxFiles int `json:"max_files"`
 	State string `json:"state"`
 	Reason string `json:"reason"`
+	Change string `json:"change"`
 }
 
 var (
@@ -211,6 +212,11 @@ func CurrentBandwidthTuneStatus() BandwidthTuneStatus {
 
 func setBandwidthTuneStatus(s BandwidthTuneStatus) {
 	bandwidthStatusMu.Lock()
+	// Keep the last meaningful adjustment visible until a newer adjustment
+	// replaces it. Status refreshes must not erase the notice every 2 seconds.
+	if s.State != "idle" && s.Change == "" {
+		s.Change = bandwidthStatus.Change
+	}
 	bandwidthStatus = s
 	bandwidthStatusMu.Unlock()
 }
@@ -321,6 +327,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 		FileLimit: initialLimit, Parallel: CurrentUploadParallel(4),
 		MaxFiles: configInt(initialCfg, "max_jobs", 48),
 		State: initialState, Reason: initialReason,
+		Change: func() string { if initialEnabled { return "等待首次调整" }; return "自动调优已关闭" }(),
 	})
 	stop := make(chan struct{})
 	done := make(chan struct{})
@@ -344,6 +351,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
 				var decision bandwidthTuneDecision
+				changeNotice := ""
 				switch {
 				case !enabled:
 					decision = decideBandwidthTune(false, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
@@ -397,6 +405,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					}
 					if nextLimit > currentLimit {
 						job.UploadLimiter.SetLimit(nextLimit)
+						changeNotice = fmt.Sprintf("文件并发 %d → %d", currentLimit, nextLimit)
 					}
 					runtimeConfigMu.Unlock()
 					decision.fileLimit = nextLimit
@@ -427,6 +436,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					}
 					if nextParallel > currentParallel {
 						runtimeParallel.Store(int64(nextParallel))
+						changeNotice = fmt.Sprintf("后续文件分片并发 %d → %d", currentParallel, nextParallel)
 					}
 					runtimeConfigMu.Unlock()
 					decision.parallel = nextParallel
@@ -436,6 +446,7 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 					Enabled: enabled, TargetMbps: target, CurrentMbps: speed,
 					ActiveFiles: active, FileLimit: decision.fileLimit, Parallel: decision.parallel,
 					MaxFiles: maxFiles, State: decision.state, Reason: decision.reason,
+					Change: changeNotice,
 				})
 			}
 		}
