@@ -240,7 +240,7 @@ func TestVerifyOneDetectsManifestInventoryMismatchWithoutDeepHash(t *testing.T) 
 		CreatedAt: "2026-11-23T00:00:00.000Z",
 	})
 	fake.files = []RemoteObj{{Name: "payload.bin", Size: 4}}
-	result, err := VerifyOne(fake, &DatasetMeta{Source: src, RawURI: "oss://test/dataset/"}, false, nil)
+	result, err := VerifyOne(fake, &DatasetMeta{Name: "dataset", CaptureDate: "2026-11-23", Type: "test", Source: src, RawURI: "oss://test/dataset/"}, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
