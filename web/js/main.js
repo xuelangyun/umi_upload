@@ -53,7 +53,7 @@ async function run(action) {
     const mode = ordMap[document.querySelector('[data-k=order].on')?.dataset.v] || 'Go SDK·逐文件夹';
     const by = {}; sel.forEach(r => by[r.fmt] = (by[r.fmt] || 0) + 1);        // 两种格式各传各的桶
     const dest = Object.keys(by).map(f => `${S.formats[f] || f} ${by[f]} 个 → 桶 ${S.buckets[f]}`).join('；');
-    if (!confirm(`上传 ${sel.length} 个数据集，约 ${sz(total)}？\n${dest}\n方式：${mode}，数据集并发：${$('dsj').value}` + warn)) return;
+    if (!confirm(`上传 ${sel.length} 个数据集，约 ${sz(total)}？\n${dest}\n方式：${mode}，数据集并发参数以配置页为准` + warn)) return;
   }
   const r = await api('/api/run', {action, ids: [...S.sel], force: $('force').checked});
   if (r.ok) toast('任务已开始');
