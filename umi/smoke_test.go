@@ -1411,7 +1411,7 @@ func TestS3CompatibleClientUsesAWSV4AndMultipart(t *testing.T) {
 		progressMu.Lock()
 		reportedBytes += n
 		progressMu.Unlock()
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("S3 multipart upload failed: %v", err)
 	}
 	progressMu.Lock()
