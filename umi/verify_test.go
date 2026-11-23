@@ -270,7 +270,7 @@ func TestCommitWritesReadyOnlyAfterVerifiedManifest(t *testing.T) {
 		files:   []RemoteObj{{Name: "payload.bin", Size: 4}},
 	}
 	ds := &DatasetMeta{RawURI: raw, Name: "dataset", CaptureDate: "2026-11-23", Type: "test"}
-	files := []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: "abc"}}
+	files := []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: strings.Repeat("a", 64)}}
 	status, revision, err := Commit(fake, ds, files)
 	if err != nil {
 		t.Fatal(err)
