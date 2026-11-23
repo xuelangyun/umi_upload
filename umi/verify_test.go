@@ -77,6 +77,66 @@ func TestRemoteCommitRejectsManifestWithInvalidRevision(t *testing.T) {
 	}
 }
 
+func fakeCommittedManifest(t *testing.T, manifest Manifest) *verifyFakeOSS {
+	t.Helper()
+	revision, err := manifestRevision(manifest.DatasetID, manifest.CaptureDate, manifest.DatasetType, manifest.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Revision = revision
+	manifestBytes, err := jsonMarshalNoEscape(manifest, "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(manifestBytes)
+	markerBytes, err := jsonMarshalNoEscape(ReadyMarker{
+		SchemaVersion: 1,
+		Revision: manifest.Revision,
+		ManifestSHA256: hex.EncodeToString(sum[:]),
+	}, "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &verifyFakeOSS{objects: map[string][]byte{
+		"oss://test/dataset/manifest.json": manifestBytes,
+		"oss://test/dataset/_READY": markerBytes,
+	}}
+}
+
+func TestRemoteCommitRejectsInvalidManifestFileEntries(t *testing.T) {
+	validHash := strings.Repeat("a", 64)
+	tests := []struct {
+		name string
+		files []ManifestFile
+	}{
+		{name: "empty path", files: []ManifestFile{{Path: "", Size: 1, SHA256: validHash}}},
+		{name: "parent traversal", files: []ManifestFile{{Path: "../secret", Size: 1, SHA256: validHash}}},
+		{name: "absolute path", files: []ManifestFile{{Path: "/root/file", Size: 1, SHA256: validHash}}},
+		{name: "backslash path", files: []ManifestFile{{Path: "dir\\\\file", Size: 1, SHA256: validHash}}},
+		{name: "negative size", files: []ManifestFile{{Path: "file", Size: -1, SHA256: validHash}}},
+		{name: "invalid sha256", files: []ManifestFile{{Path: "file", Size: 1, SHA256: "not-a-hash"}}},
+		{name: "duplicate path", files: []ManifestFile{
+			{Path: "file", Size: 1, SHA256: validHash},
+			{Path: "file", Size: 1, SHA256: validHash},
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := fakeCommittedManifest(t, Manifest{
+				SchemaVersion: 1,
+				DatasetID: "dataset",
+				CaptureDate: "2026-11-23",
+				DatasetType: "test",
+				Files: tc.files,
+				CreatedAt: "2026-11-23T00:00:00.000Z",
+			})
+			if _, err := RemoteCommit(fake, "oss://test/dataset/"); err == nil {
+				t.Fatal("RemoteCommit accepted invalid manifest file entries")
+			}
+		})
+	}
+}
+
 func TestRemoteCommitRejectsUnsupportedManifestSchema(t *testing.T) {
 	manifestBytes := []byte(`{"schema_version":99,"dataset_id":"dataset","capture_date":"2026-11-23","dataset_type":"test","files":[],"revision":"raw-test","created_at":"2026-11-23T00:00:00.000Z"}`)
 	sum := sha256.Sum256(manifestBytes)
@@ -114,6 +174,29 @@ func TestVerifyOneRejectsMismatchedReadyManifest(t *testing.T) {
 	ds := &DatasetMeta{Source: src, RawURI: raw}
 	if _, err := VerifyOne(fake, ds, false, nil); err == nil {
 		t.Fatal("VerifyOne accepted a _READY marker whose manifest checksum does not match")
+	}
+}
+
+func TestVerifyOneDetectsManifestInventoryMismatchWithoutDeepHash(t *testing.T) {
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake := fakeCommittedManifest(t, Manifest{
+		SchemaVersion: 1,
+		DatasetID: "dataset",
+		CaptureDate: "2026-11-23",
+		DatasetType: "test",
+		Files: []ManifestFile{{Path: "other.bin", Size: 4, SHA256: strings.Repeat("a", 64)}},
+		CreatedAt: "2026-11-23T00:00:00.000Z",
+	})
+	fake.files = []RemoteObj{{Name: "payload.bin", Size: 4}}
+	result, err := VerifyOne(fake, &DatasetMeta{Source: src, RawURI: "oss://test/dataset/"}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "不一致" || len(result.ManifestDiff) != 2 {
+		t.Fatalf("manifest mismatch was not reported: status=%q diff=%v", result.Status, result.ManifestDiff)
 	}
 }
 
