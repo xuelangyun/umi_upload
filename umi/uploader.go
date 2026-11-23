@@ -537,13 +537,27 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 		var errMu sync.Mutex
 		var firstErr error
 		var wg sync.WaitGroup
+		shouldStopGroupScheduling := func() bool {
+			errMu.Lock()
+			failed := firstErr != nil
+			errMu.Unlock()
+			return failed || AppCtx.Err() != nil
+		}
 
 		for _, idx := range g.Indices {
+			if shouldStopGroupScheduling() {
+				break
+			}
 			it := sortedInv[idx]
 			if err := limiter.Acquire(AppCtx); err != nil {
 				errMu.Lock()
 				if firstErr == nil { firstErr = err }
 				errMu.Unlock()
+				break
+			}
+			// A sibling may have failed while this goroutine waited for a slot.
+			if shouldStopGroupScheduling() {
+				limiter.Release()
 				break
 			}
 			wg.Add(1)
@@ -581,6 +595,9 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 		wg.Wait()
 		if firstErr != nil {
 			return nil, firstErr
+		}
+		if err := AppCtx.Err(); err != nil {
+			return nil, err
 		}
 
 		// Verify remote folder list immediately after slice finishes
