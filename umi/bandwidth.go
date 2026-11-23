@@ -279,7 +279,15 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				speed := job.M.Speed() * 8 / 1e6
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
-				decision := decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
+				var decision bandwidthTuneDecision
+				if enabled && active > 0 && !job.M.HasRecentActivity(10*time.Second) {
+					decision = bandwidthTuneDecision{
+						fileLimit: currentLimit, parallel: parallel,
+						state: "waiting", reason: "最近 10 秒没有实际上传字节进度，等待上传活动",
+					}
+				} else {
+					decision = decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
+				}
 
 				switch decision.action {
 				case "files":
