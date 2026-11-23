@@ -103,6 +103,28 @@ func fakeCommittedManifest(t *testing.T, manifest Manifest) *verifyFakeOSS {
 	}}
 }
 
+func TestMakeManifestRejectsInvalidLocalFiles(t *testing.T) {
+	validHash := strings.Repeat("a", 64)
+	tests := []struct {
+		name string
+		files []ManifestFile
+	}{
+		{name: "invalid hash", files: []ManifestFile{{Path: "file", Size: 1, SHA256: "abc"}}},
+		{name: "duplicate path", files: []ManifestFile{
+			{Path: "file", Size: 1, SHA256: validHash},
+			{Path: "file", Size: 1, SHA256: validHash},
+		}},
+		{name: "path traversal", files: []ManifestFile{{Path: "../file", Size: 1, SHA256: validHash}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := MakeManifest(&DatasetMeta{Name: "dataset", CaptureDate: "2026-11-23", Type: "test"}, tc.files); err == nil {
+				t.Fatal("MakeManifest accepted invalid local file entries")
+			}
+		})
+	}
+}
+
 func TestRemoteCommitRejectsInvalidManifestFileEntries(t *testing.T) {
 	validHash := strings.Repeat("a", 64)
 	tests := []struct {
