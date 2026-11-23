@@ -174,6 +174,18 @@ func TestAddSentRollbackDoesNotReduceNetworkMeter(t *testing.T) {
 	}
 }
 
+func TestAddProgressSentDoesNotAffectNetworkMeter(t *testing.T) {
+	job := &Job{M: NewMeter()}
+	ctx := &JobContext{Parent: job, Prog: ProgState{Total: 100}}
+	AddProgressSent(ctx, 100)
+	if ctx.Prog.Sent != 100 {
+		t.Fatalf("logical progress for an existing remote object = %d, want 100", ctx.Prog.Sent)
+	}
+	if got := job.M.Total(); got != 0 {
+		t.Fatalf("existing remote object contributed %d network bytes, want 0", got)
+	}
+}
+
 func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
 	l := NewDynamicLimiter(1)
 	ctx, cancel := context.WithCancel(context.Background())
