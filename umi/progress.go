@@ -72,6 +72,23 @@ func (m *Meter) Speed() float64 {
 	return float64(diff) / dt
 }
 
+// HasRecentActivity reports whether actual upload bytes were acknowledged
+// within the supplied interval. A zero throughput sample alone cannot
+// distinguish an idle/hash phase from a stalled transfer.
+func (m *Meter) HasRecentActivity(within time.Duration) bool {
+	if m == nil || within <= 0 {
+		return false
+	}
+	now := nowSec()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.q) == 0 {
+		return false
+	}
+	age := now - m.q[len(m.q)-1].t
+	return age >= 0 && age <= within.Seconds()
+}
+
 // JobItem tracks one dataset inside a batch Job.
 type JobItem struct {
 	Rel   string `json:"rel"`
