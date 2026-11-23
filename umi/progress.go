@@ -149,6 +149,19 @@ func CtxLog(ctx *JobContext, text string) {
 	JobLog(ctx.Parent, ctx.Tag, text)
 }
 
+// AddProgressSent updates dataset progress for already-present remote files without
+// counting those bytes as network throughput.
+func AddProgressSent(ctx *JobContext, n int64) {
+	if ctx == nil { return }
+	PL.Lock()
+	p := &ctx.Prog
+	next := p.Sent + n
+	if next < 0 { next = 0 }
+	if p.Total > 0 && next > p.Total { next = p.Total }
+	p.Sent = next
+	PL.Unlock()
+}
+
 func AddSent(ctx *JobContext, n int64) {
 	if ctx == nil {
 		return
