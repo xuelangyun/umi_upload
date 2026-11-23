@@ -145,6 +145,35 @@ func TestResetRuntimeTuningRestoresConfiguredBaseline(t *testing.T) {
 	}
 }
 
+func TestS3ProgressHookReportsRequestBodyBytes(t *testing.T) {
+	var reported int64
+	hook := &s3ProgressHook{onDelta: func(n int64) { reported += n }}
+	buf := make([]byte, 4096)
+	n, err := hook.Read(buf)
+	if err != nil {
+		t.Fatalf("progress hook Read returned error: %v", err)
+	}
+	if n != len(buf) {
+		t.Fatalf("progress hook Read = %d, want %d", n, len(buf))
+	}
+	if reported != int64(len(buf)) {
+		t.Fatalf("reported request bytes = %d, want %d", reported, len(buf))
+	}
+}
+
+func TestAddSentRollbackDoesNotReduceNetworkMeter(t *testing.T) {
+	job := &Job{M: NewMeter()}
+	ctx := &JobContext{Parent: job, Prog: ProgState{Total: 100}}
+	AddSent(ctx, 80)
+	AddSent(ctx, -80)
+	if ctx.Prog.Sent != 0 {
+		t.Fatalf("logical progress after rollback = %d, want 0", ctx.Prog.Sent)
+	}
+	if got := job.M.Total(); got != 80 {
+		t.Fatalf("network meter total after rollback = %d, want 80", got)
+	}
+}
+
 func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
 	l := NewDynamicLimiter(1)
 	ctx, cancel := context.WithCancel(context.Background())
