@@ -4,7 +4,6 @@ const CFG_KEY = {order: 'order', ds_jobs: 'ds_jobs'};   // 配置项 → /api/st
 function renderControls(s) {
   document.querySelectorAll('[data-act=cfg]').forEach(b => b.classList.toggle('on', String(s[CFG_KEY[b.dataset.k]]) === b.dataset.v));
   document.querySelectorAll('[data-show]').forEach(e => e.hidden = e.dataset.show !== s.method);      // 方式相关的控件
-  $('dsj').value = s.ds_jobs;
 }
 
 /* 数据源卡片上的「格式 → 桶」：目录名决定会话格式，格式决定上传到哪个桶（两种格式可同时使用） */
