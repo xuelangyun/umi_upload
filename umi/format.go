@@ -359,6 +359,12 @@ func manifestRevision(datasetID, captureDate, datasetType string, files []Manife
 }
 
 func MakeManifest(ds *DatasetMeta, files []ManifestFile) (Manifest, error) {
+	if ds == nil || ds.Name == "" || ds.CaptureDate == "" || ds.Type == "" {
+		return Manifest{}, NewUploadError("数据集标识字段不能为空")
+	}
+	if err := validateManifestFiles(files); err != nil {
+		return Manifest{}, NewUploadError("本地文件清单非法: %v", err)
+	}
 	sorted := make([]ManifestFile, len(files))
 	copy(sorted, files)
 	sort.Slice(sorted, func(i, j int) bool {
