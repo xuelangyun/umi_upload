@@ -24,6 +24,7 @@ func TestDynamicLimiterResizesWithoutCancelingActiveWork(t *testing.T) {
 	case <-time.After(40 * time.Millisecond):
 	}
 	l.Release()
+	l.Release()
 	select {
 	case <-acquired:
 	case <-time.After(time.Second):
