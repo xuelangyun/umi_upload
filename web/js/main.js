@@ -82,7 +82,7 @@ async function poll(tick) {
   $('sinfo').title = '数据库：' + s.db;
   if (S.prevScan && !s.scan.running) {                   // 扫描刚结束：反馈结果
     const rs = s.scan.result || {};
-    toast(rs.error ? '扫描失败：' + rs.error : `扫描完成：${rs.count} 个会话（重新统计 ${rs.scanned} · 缓存 ${rs.cached}），${rs.problems} 个问题` + (nw ? `，${nw} 个有日期/房间提示` : '') + `，用时 ${s.scan.elapsed}s`);
+    toast(rs.error ? '扫描失败：' + rs.error : `扫描完成：${Number(rs.count ?? 0)} 个会话（重新统计 ${Number(rs.scanned ?? 0)} · 缓存 ${Number(rs.cached ?? 0)}），${Number(rs.problems ?? 0)} 个问题` + (nw ? `，${nw} 个有日期/房间提示` : '') + `，用时 ${s.scan.elapsed}s`);
     if (!rs.error && (S.PR.length || nw)) openProblems();
   }
   S.prevScan = s.scan.running;
