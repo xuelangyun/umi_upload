@@ -31,7 +31,16 @@ func (l *DynamicLimiter) notifyLocked() {
 
 func (l *DynamicLimiter) Acquire(ctx context.Context) error {
 	for {
+		// Do not admit work when its parent job has already been canceled,
+		// even if a slot happens to be available.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		l.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			l.mu.Unlock()
+			return err
+		}
 		if l.active < l.limit {
 			l.active++
 			l.mu.Unlock()
