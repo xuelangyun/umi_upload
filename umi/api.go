@@ -39,6 +39,9 @@ var cfgNumBounds = map[string][2]int{
 	"ds_jobs":  {1, 32},
 	"wan":      {1, 16},
 	"net_wait": {0, 10080},
+	"target_mbps": {0, 100000},
+	"max_jobs": {1, 512},
+	"max_parallel": {1, 64},
 }
 
 var cfgEnums = map[string][]string{
@@ -46,6 +49,7 @@ var cfgEnums = map[string][]string{
 	"method":       {"sdk", "ossutil"},
 	"order":        {"folder", "slice", "pipeline"},
 	"ossutil_unit": {"slice", "session"},
+	"auto_tune": {"true", "false"},
 }
 
 var cfgAllowedKeys = map[string]bool{
@@ -65,6 +69,10 @@ var cfgAllowedKeys = map[string]bool{
 	"ossutil_path": true,
 	"ossutil_args": true,
 	"net_wait":     true,
+	"target_mbps":  true,
+	"auto_tune":    true,
+	"max_jobs":     true,
+	"max_parallel": true,
 }
 
 func cfgCheck(k, v string) string {
@@ -884,7 +892,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/api/net/plan", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/bandwidth", func(w http.ResponseWriter, r *http.Request) {\n\t\tif r.Method != http.MethodGet { writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"}); return }\n\t\twriteJSON(w, http.StatusOK, CurrentBandwidthTuneStatus())\n\t})\n\n	mux.HandleFunc("/api/net/plan", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 			return
