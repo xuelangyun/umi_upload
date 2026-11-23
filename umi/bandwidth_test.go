@@ -64,6 +64,11 @@ func TestDynamicLimiterAcquireHonorsContext(t *testing.T) {
 
 func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	oldParallel := runtimeParallel.Load()
+	runtimeConfigMu.Lock()
+	oldApplied := runtimeAppliedCfg
+	runtimeAppliedCfg = nil
+	runtimeConfigMu.Unlock()
+
 	files := NewDynamicLimiter(2)
 	datasets := NewDynamicLimiter(1)
 	registerUploadLimiter(files)
@@ -72,27 +77,39 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 		unregisterUploadLimiter(files)
 		unregisterDatasetLimiter(datasets)
 		runtimeParallel.Store(oldParallel)
+		runtimeConfigMu.Lock()
+		runtimeAppliedCfg = oldApplied
+		runtimeConfigMu.Unlock()
 	}()
 
-	ApplyRuntimeConfig(map[string]string{
+	cfg := map[string]string{
 		"jobs": "5", "ds_jobs": "3", "parallel": "7",
-		"max_jobs": "20", "max_parallel": "8",
-	})
+		"max_jobs": "20", "max_parallel": "8", "target_mbps": "350",
+	}
+	ApplyRuntimeConfig(cfg)
 	_, fileLimit := files.Stats()
 	_, datasetLimit := datasets.Stats()
 	if fileLimit != 15 { t.Fatalf("file limit = %d, want 15", fileLimit) }
 	if datasetLimit != 3 { t.Fatalf("dataset limit = %d, want 3", datasetLimit) }
 	if got := CurrentUploadParallel(4); got != 7 { t.Fatalf("parallel = %d, want 7", got) }
 
-	// A lower max_parallel must take effect immediately for subsequent uploads,
-	// even when the saved manual parallel value is higher.
-	ApplyRuntimeConfig(map[string]string{
-		"jobs": "5", "ds_jobs": "3", "parallel": "7",
-		"max_jobs": "20", "max_parallel": "5",
-	})
+	// Simulate tuner-discovered concurrency. Updating non-concurrency
+	// settings must retain these values rather than resetting to the baseline.
+	files.SetLimit(18)
+	runtimeParallel.Store(8)
+	updated := copyStringMap(cfg)
+	updated["target_mbps"] = "420"
+	updated["auto_tune"] = "false"
+	ApplyRuntimeConfig(updated)
+	_, fileLimit = files.Stats()
+	if fileLimit != 18 { t.Fatalf("unrelated config update reset file limit to %d, want 18", fileLimit) }
+	if got := CurrentUploadParallel(4); got != 8 { t.Fatalf("unrelated config update reset parallel to %d, want 8", got) }
+
+	// An explicit max_parallel change rebases the multipart limit immediately.
+	updated["max_parallel"] = "5"
+	ApplyRuntimeConfig(updated)
 	if got := CurrentUploadParallel(4); got != 5 { t.Fatalf("parallel after lowering max_parallel = %d, want 5", got) }
 }
-
 func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
 	l := NewDynamicLimiter(1)
 	ctx, cancel := context.WithCancel(context.Background())
