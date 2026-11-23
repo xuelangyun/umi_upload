@@ -84,3 +84,16 @@ func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
 	if datasetLimit != 3 { t.Fatalf("dataset limit = %d, want 3", datasetLimit) }
 	if got := CurrentUploadParallel(4); got != 7 { t.Fatalf("parallel = %d, want 7", got) }
 }
+
+func TestDynamicLimiterRejectsAlreadyCanceledContext(t *testing.T) {
+	l := NewDynamicLimiter(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := l.Acquire(ctx); err == nil {
+		t.Fatal("Acquire admitted work with an already-canceled context")
+	}
+	active, limit := l.Stats()
+	if active != 0 || limit != 1 {
+		t.Fatalf("active/limit = %d/%d, want 0/1", active, limit)
+	}
+}
