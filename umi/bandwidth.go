@@ -74,7 +74,7 @@ var (
 	activeDatasetLimiter *DynamicLimiter
 )
 
-func init() {}
+
 
 // CurrentUploadParallel is read for every new object upload, so a changed
 // parallel setting affects subsequent files without rebuilding the OSS client.
@@ -91,8 +91,6 @@ func ApplyRuntimeConfig(cfg map[string]string) {
 	if dsJobs < 1 { dsJobs = 1 }
 	parallel, _ := strconv.Atoi(cfg["parallel"])
 	if parallel < 1 { parallel = 4 }
-	runtimeParallel.Store(int64(parallel))
-
 	runtimeTuneMu.RLock()
 	limiter := activeUploadLimiter
 	runtimeTuneMu.RUnlock()
@@ -177,28 +175,10 @@ func configFloat(cfg map[string]string, key string, fallback float64) float64 {
 
 // StartBandwidthTuner adjusts only future file admissions and future multipart
 // requests. It never cancels an in-flight object upload or changes commit order.
-func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
+func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 	if job == nil || job.Action != "upload" || job.UploadLimiter == nil {
 		return func() {}
 	}
-	enabled := configBool(cfg, "auto_tune", true)
-	target := configFloat(cfg, "target_mbps", 350)
-	maxFiles := configInt(cfg, "max_jobs", 48)
-	maxParallel := configInt(cfg, "max_parallel", 12)
-	if maxFiles < 1 { maxFiles = 1 }
-	if maxParallel < 1 { maxParallel = 1 }
-
-	active, limit := job.UploadLimiter.Stats()
-	setBandwidthTuneStatus(BandwidthTuneStatus{
-		Enabled: enabled, TargetMbps: target, CurrentMbps: job.M.Speed()*8/1e6,
-		ActiveFiles: active, FileLimit: limit, Parallel: CurrentUploadParallel(4),
-		MaxFiles: maxFiles, State: "monitoring",
-	})
-	if !enabled {
-		setBandwidthTuneStatus(BandwidthTuneStatus{Enabled:false, TargetMbps:target, CurrentMbps:job.M.Speed()*8/1e6, ActiveFiles:active, FileLimit:limit, Parallel:CurrentUploadParallel(4), MaxFiles:maxFiles, State:"manual", Reason:"自动调优已关闭"})
-		return func() {}
-	}
-
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -210,13 +190,19 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 			case <-stop:
 				return
 			case <-ticker.C:
+				cfg := ActiveCfg() // read the latest saved settings on every cycle
+				enabled := configBool(cfg, "auto_tune", true)
+				target := configFloat(cfg, "target_mbps", 350)
+				maxFiles := configInt(cfg, "max_jobs", 48)
+				maxParallel := configInt(cfg, "max_parallel", 12)
 				speed := job.M.Speed() * 8 / 1e6
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
-				reason := "当前吞吐已接近目标，保持并发"
-				state := "holding"
+				state, reason := "holding", "当前吞吐已接近目标，保持并发"
 
-				if target <= 0 || speed < target*0.95 {
+				if !enabled {
+					state, reason = "manual", "自动调优已关闭，使用手动配置"
+				} else if target <= 0 || speed < target*0.95 {
 					if active >= currentLimit && currentLimit < maxFiles {
 						next := currentLimit + 2
 						if next > maxFiles { next = maxFiles }
@@ -238,9 +224,9 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 					}
 				}
 				setBandwidthTuneStatus(BandwidthTuneStatus{
-					Enabled:true, TargetMbps:target, CurrentMbps:speed,
-					ActiveFiles:active, FileLimit:currentLimit, Parallel:parallel,
-					MaxFiles:maxFiles, State:state, Reason:reason,
+					Enabled: enabled, TargetMbps: target, CurrentMbps: speed,
+					ActiveFiles: active, FileLimit: currentLimit, Parallel: parallel,
+					MaxFiles: maxFiles, State: state, Reason: reason,
 				})
 			}
 		}
@@ -248,7 +234,7 @@ func StartBandwidthTuner(job *Job, cfg map[string]string) func() {
 	return func() {
 		close(stop)
 		<-done
-		setBandwidthTuneStatus(BandwidthTuneStatus{State:"idle"})
+		setBandwidthTuneStatus(BandwidthTuneStatus{State: "idle"})
 	}
 }
 
