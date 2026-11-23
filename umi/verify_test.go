@@ -31,7 +31,7 @@ func (f *verifyFakeOSS) ReadObject(uri string) ([]byte, bool, error) {
 	b, ok := f.objects[uri]
 	out := append([]byte(nil), b...)
 	if ok && f.tamperManifestRead && strings.HasSuffix(uri, "manifest.json") && len(out) > 0 {
-		out = []byte(strings.Replace(string(out), "abc", "abd", 1))
+		out = []byte(strings.Replace(string(out), "aaaa", "baaa", 1))
 	}
 	return out, ok, nil
 }
@@ -50,7 +50,7 @@ func TestRemoteCommitRejectsManifestWithInvalidRevision(t *testing.T) {
 		DatasetID:     "dataset",
 		CaptureDate:   "2026-11-23",
 		DatasetType:   "test",
-		Files:         []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: "abc"}},
+		Files:         []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: strings.Repeat("a", 64)}},
 		Revision:      "raw-not-derived-from-content",
 		CreatedAt:     "2026-11-23T00:00:00.000Z",
 	}
@@ -252,7 +252,7 @@ func TestCommitDoesNotWriteReadyWhenManifestReadbackDiffers(t *testing.T) {
 		tamperManifestRead: true,
 	}
 	ds := &DatasetMeta{RawURI: raw, Name: "dataset", CaptureDate: "2026-11-23", Type: "test"}
-	files := []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: "abc"}}
+	files := []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: strings.Repeat("a", 64)}}
 	if _, _, err := Commit(fake, ds, files); err == nil {
 		t.Fatal("Commit accepted a manifest that failed read-back verification")
 	}
