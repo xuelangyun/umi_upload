@@ -169,8 +169,8 @@ func CtxLog(ctx *JobContext, text string) {
 	JobLog(ctx.Parent, ctx.Tag, text)
 }
 
-// AddProgressSent updates dataset progress for already-present remote files without
-// counting those bytes as network throughput.
+// AddProgressSent updates logical dataset progress without changing the
+// network-throughput meter. Use it for pre-existing and resumed bytes.
 func AddProgressSent(ctx *JobContext, n int64) {
 	if ctx == nil { return }
 	PL.Lock()
