@@ -2,6 +2,9 @@ package umi
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,7 +40,7 @@ type OSSClient interface {
 	PutObject(uri string, data []byte) error
 	ReadObject(uri string) ([]byte, bool, error)
 	ListObjects(uriPrefix string) ([]RemoteObj, error)
-	UploadFile(localPath, key string, size int64, ckptDir string, onDelta func(int64)) error
+	UploadFile(localPath, key string, size int64, ckptDir string, onProgress, onTraffic func(int64)) error
 	TestBucket() error
 	SetNetCallback(cb NetWaitCallback)
 }
@@ -438,16 +442,121 @@ func (c *AliyunOSSClient) ListObjects(uriPrefix string) ([]RemoteObj, error) {
 	return result, nil
 }
 
-func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir string, onDelta func(int64)) error {
+type ossUploadCheckpointData struct {
+	FilePath string
+	FileMeta struct {
+		Size         int64
+		LastModified string
+	}
+	ObjectInfo struct {
+		Name string
+	}
+	PartSize int64
+	UploadInfo struct {
+		UploadId string
+	}
+}
+
+type ossUploadCheckpoint struct {
+	Magic string
+	MD5   string
+	Data  ossUploadCheckpointData
+}
+
+func isOSSResumeProgress(resumeBytes, inc, transferred int64) bool {
+	return resumeBytes > 0 && inc == resumeBytes && transferred == resumeBytes
+}
+
+// checkpointResumeBytes mirrors the OSS SDK v1.6.1 checkpoint validation and
+// consecutive-full-part calculation. The SDK reports resumed bytes through
+// ProgressFn even though those bytes were transferred in an earlier attempt.
+func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string, size int64) int64 {
+	if ckptDir == "" {
+		return 0
+	}
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return 0
+	}
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		return 0
+	}
+	srcHash := md5.Sum([]byte(absPath))
+	prefix := hex.EncodeToString(srcHash[:]) + "-"
+	checkpointDir := filepath.Dir(ckptDir)
+	entries, err := os.ReadDir(checkpointDir)
+	if err != nil {
+		return 0
+	}
+
+	partSize := PartSize
+	for size/partSize >= int64(oss.MaxUploadParts) {
+		partSize += PartSize
+	}
+	objectName := "oss://" + c.params.Bucket + "/" + key
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, oss.CheckpointFileSuffixUploader) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(checkpointDir, name))
+		if err != nil {
+			continue
+		}
+		var cp ossUploadCheckpoint
+		if json.Unmarshal(data, &cp) != nil {
+			continue
+		}
+		if cp.Magic != oss.CheckpointMagic ||
+			cp.Data.FilePath != localPath ||
+			cp.Data.FileMeta.Size != info.Size() ||
+			cp.Data.FileMeta.Size != size ||
+			cp.Data.FileMeta.LastModified != info.ModTime().String() ||
+			cp.Data.ObjectInfo.Name != objectName ||
+			cp.Data.PartSize != partSize ||
+			cp.Data.UploadInfo.UploadId == "" {
+			continue
+		}
+		encoded, err := json.Marshal(cp.Data)
+		if err != nil {
+			continue
+		}
+		sum := md5.Sum(encoded)
+		if cp.MD5 != hex.EncodeToString(sum[:]) {
+			continue
+		}
+
+		paginator := oss.NewListPartsPaginator(c.client, &oss.ListPartsRequest{
+			Bucket:   oss.Ptr(c.params.Bucket),
+			Key:      oss.Ptr(key),
+			UploadId: oss.Ptr(cp.Data.UploadInfo.UploadId),
+		})
+		checkPartNumber := int32(1)
+	outer:
+		for paginator.HasNext() {
+			page, err := paginator.NextPage(AppCtx)
+			if err != nil {
+				return 0
+			}
+			for _, part := range page.Parts {
+				if part.PartNumber != checkPartNumber || part.Size != partSize {
+					break outer
+				}
+				checkPartNumber++
+			}
+		}
+		return int64(checkPartNumber-1) * partSize
+	}
+	return 0
+}
+
+func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir string, onProgress, onTraffic func(int64)) error {
 	if size < 0 {
 		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
 
 	parallel := CurrentUploadParallel(c.params.Parallel)
-
-	// All local files go through the SDK v2 file-path API. Uploader.UploadFile
-	// internally uses PutObject for files smaller than PartSize and multipart
-	// for larger files. Enable persistent checkpoints for multipart-sized files.
 	useCheckpoint := size >= MultipartThreshold && ckptDir != ""
 	if useCheckpoint {
 		if err := os.MkdirAll(ckptDir, 0o700); err != nil {
@@ -462,15 +571,18 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 		n := reported
 		reported = 0
 		progMu.Unlock()
-		if n > 0 && onDelta != nil {
-			onDelta(-n)
+		if n > 0 && onProgress != nil {
+			onProgress(-n)
 		}
 	}
 
 	err := c.runWithRetry(func() error {
-		// A retry restarts progress accounting. For multipart uploads the SDK
-		// may resume from checkpoint; the completed bytes will be reported again.
 		rollbackProgress()
+		resumeBytes := int64(0)
+		if useCheckpoint {
+			resumeBytes = c.checkpointResumeBytes(localPath, key, ckptDir, size)
+		}
+		resumePending := resumeBytes > 0
 
 		uploader := oss.NewUploader(c.client, func(uo *oss.UploaderOptions) {
 			uo.PartSize = PartSize
@@ -486,18 +598,25 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 			Bucket: oss.Ptr(c.params.Bucket),
 			Key:    oss.Ptr(key),
 			ProgressFn: func(inc, transferred, total int64) {
-				if inc <= 0 || onDelta == nil {
+				if inc <= 0 {
 					return
 				}
 				progMu.Lock()
 				reported += inc
+				isResume := resumePending && isOSSResumeProgress(resumeBytes, inc, transferred)
+				if isResume {
+					resumePending = false
+				}
 				progMu.Unlock()
-				onDelta(inc)
+				if onProgress != nil {
+					onProgress(inc)
+				}
+				if !isResume && onTraffic != nil {
+					onTraffic(inc)
+				}
 			},
 		}
 
-		// Use Uploader.UploadFile (not UploadFrom): the SDK opens the local
-		// path itself and supports persistent multipart checkpoint recovery.
 		_, uploadErr := uploader.UploadFile(AppCtx, req, localPath)
 		return uploadErr
 	})
@@ -507,13 +626,17 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 	}
 
 	// SDK v1.6.1 does not emit ProgressFn for its internal single-part path.
-	// Account for small files only after the single PutObject has completed.
 	progMu.Lock()
 	diff := size - reported
 	reported = size
 	progMu.Unlock()
-	if diff > 0 && onDelta != nil {
-		onDelta(diff)
+	if diff > 0 {
+		if onProgress != nil {
+			onProgress(diff)
+		}
+		if onTraffic != nil {
+			onTraffic(diff)
+		}
 	}
 	return nil
 }
