@@ -385,7 +385,7 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		}
 
 		if sz, ok := skipRemote[it.Rel]; ok && sz == it.Size {
-			AddSent(ctx, it.Size)
+			AddProgressSent(ctx, it.Size)
 		} else {
 			uerr := oss.UploadFile(it.Path, keyPrefix+it.Rel, it.Size, ckptSubDir, func(delta int64) {
 				AddSent(ctx, delta)
@@ -435,16 +435,16 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		PL.Unlock()
 	}
 
-	sem := make(chan struct{}, jobsN)
+	limiter := uploadLimiterFor(ctx, jobsN)
 	if order == "pipeline" {
 		var wg sync.WaitGroup
 		for gi, g := range groups {
 			for _, idx := range g.Indices {
-				wg.Add(1)
-				sem <- struct{}{}
+				if err := limiter.Acquire(AppCtx); err != nil { break }
+					wg.Add(1)
 				go func(groupI, itemI int) {
 					defer wg.Done()
-					defer func() { <-sem }()
+					defer limiter.Release()
 					uploadSingle(groupI, itemI)
 				}(gi, idx)
 			}
@@ -486,7 +486,7 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 	hasher := StartAheadHasher(ctx, sortedInv)
 	defer hasher.Stop()
 
-	sem := make(chan struct{}, jobsN)
+	limiter := uploadLimiterFor(ctx, jobsN)
 	for gi, g := range groups {
 		var gSize int64
 		for _, k := range g.Indices {
@@ -508,11 +508,11 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 
 		for _, idx := range g.Indices {
 			it := sortedInv[idx]
+			if err := limiter.Acquire(AppCtx); err != nil { break }
 			wg.Add(1)
-			sem <- struct{}{}
 			go func(item InvItem) {
 				defer wg.Done()
-				defer func() { <-sem }()
+				defer limiter.Release()
 
 				errMu.Lock()
 				failed := firstErr != nil
@@ -522,7 +522,7 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 				}
 
 				if sz, ok := skipRemote[item.Rel]; ok && sz == item.Size {
-					AddSent(ctx, item.Size)
+					AddProgressSent(ctx, item.Size)
 				} else {
 					uerr := oss.UploadFile(item.Path, keyPrefix+item.Rel, item.Size, ckptSubDir, func(delta int64) {
 						AddSent(ctx, delta)
