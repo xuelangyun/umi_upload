@@ -241,6 +241,10 @@ func tuneActionAllowed(cfg map[string]string, speedMbps float64) bool {
 	return target <= 0 || speedMbps < target*0.95
 }
 
+func shouldWaitForUploadActivity(enabled, hasRecentActivity bool) bool {
+	return enabled && !hasRecentActivity
+}
+
 // StartBandwidthTuner adjusts only future file admissions and future multipart
 // requests. It never cancels an in-flight object upload or changes commit order.
 type bandwidthTuneDecision struct {
@@ -334,10 +338,14 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 				active, currentLimit := job.UploadLimiter.Stats()
 				parallel := CurrentUploadParallel(4)
 				var decision bandwidthTuneDecision
-				if enabled && active > 0 && !job.M.HasRecentActivity(10*time.Second) {
+				if shouldWaitForUploadActivity(enabled, job.M.HasRecentActivity(10*time.Second)) {
+					reason := "最近 10 秒没有实际上传字节进度，等待上传活动"
+					if active == 0 {
+						reason = "当前没有活动上传文件，等待上传活动后再调优"
+					}
 					decision = bandwidthTuneDecision{
 						fileLimit: currentLimit, parallel: parallel,
-						state: "waiting", reason: "最近 10 秒没有实际上传字节进度，等待上传活动",
+						state: "waiting", reason: reason,
 					}
 				} else {
 					decision = decideBandwidthTune(enabled, target, speed, active, currentLimit, parallel, maxFiles, maxParallel)
