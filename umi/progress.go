@@ -182,27 +182,15 @@ func AddProgressSent(ctx *JobContext, n int64) {
 	PL.Unlock()
 }
 
-func AddSent(ctx *JobContext, n int64) {
-	if ctx == nil {
-		return
-	}
-	PL.Lock()
-	p := &ctx.Prog
-	next := p.Sent + n
-	if next < 0 {
-		next = 0
-	}
-	if p.Total > 0 && next > p.Total {
-		next = p.Total
-	}
-	p.Sent = next
-	PL.Unlock()
-	// Progress may be rolled back after a failed attempt. Keep the throughput
-	// meter monotonic so it measures transmitted request-body bytes, including
-	// retries, rather than net logical file progress.
-	if n > 0 && ctx.Parent != nil && ctx.Parent.M != nil {
+func AddNetworkTraffic(ctx *JobContext, n int64) {
+	if n > 0 && ctx != nil && ctx.Parent != nil && ctx.Parent.M != nil {
 		ctx.Parent.M.Add(n)
 	}
+}
+
+func AddSent(ctx *JobContext, n int64) {
+	AddProgressSent(ctx, n)
+	AddNetworkTraffic(ctx, n)
 }
 
 func HashFile(path string, ctx *JobContext) (string, error) {
