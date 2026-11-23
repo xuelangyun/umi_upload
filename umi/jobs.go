@@ -187,43 +187,45 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 	c = ApplyCfg()
 	workers := 1
 	if action != "verify_deep" {
-		if n, err := strconv.Atoi(c["ds_jobs"]); err == nil && n > 1 {
-			workers = n
-		}
+		if n, err := strconv.Atoi(c["ds_jobs"]); err == nil && n > 1 { workers = n }
 	}
-
+	datasetLimiter := NewDynamicLimiter(workers)
+	var stopTuner func()
 	if action == "upload" {
 		maxFiles := configInt(c, "max_jobs", 48)
 		initial := workers * configInt(c, "jobs", 16)
 		if initial > maxFiles { initial = maxFiles }
 		if initial < 1 { initial = 1 }
 		job.UploadLimiter = NewDynamicLimiter(initial)
+		job.DatasetLimiter = datasetLimiter
 		registerUploadLimiter(job.UploadLimiter)
-		stopTuner := StartBandwidthTuner(job, c)
-		defer func() { stopTuner(); unregisterUploadLimiter(job.UploadLimiter); job.UploadLimiter = nil }()
+		registerDatasetLimiter(datasetLimiter)
+		stopTuner = StartBandwidthTuner(job, c)
+	} else {
+		stopTuner = func() {}
 	}
-	sem := make(chan struct{}, workers)
+	defer func() {
+		stopTuner()
+		if job.UploadLimiter != nil { unregisterUploadLimiter(job.UploadLimiter); job.UploadLimiter = nil }
+		if job.DatasetLimiter != nil { unregisterDatasetLimiter(job.DatasetLimiter); job.DatasetLimiter = nil }
+	}()
+
 	var wg sync.WaitGroup
 	for i, r := range recs {
+		if err := datasetLimiter.Acquire(AppCtx); err != nil { break }
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(idx int, rec *DatasetRecord) {
 			defer wg.Done()
-			defer func() { <-sem }()
+			defer datasetLimiter.Release()
 			ProcessOne(job, idx, rec, action, c)
 		}(i, r)
 	}
 	wg.Wait()
 
 	PL.Lock()
-	okCount := 0
-	failCount := 0
+	okCount, failCount := 0, 0
 	for _, it := range job.Items {
-		if it.State == "done" {
-			okCount++
-		} else if it.State == "fail" {
-			failCount++
-		}
+		if it.State == "done" { okCount++ } else if it.State == "fail" { failCount++ }
 	}
 	PL.Unlock()
 
