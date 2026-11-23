@@ -470,7 +470,7 @@ func isOSSResumeProgress(resumeBytes, inc, transferred int64) bool {
 // checkpointResumeBytes mirrors the OSS SDK v1.6.1 checkpoint validation and
 // consecutive-full-part calculation. The SDK reports resumed bytes through
 // ProgressFn even though those bytes were transferred in an earlier attempt.
-func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string, size int64) int64 {
+func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string) int64 {
 	if ckptDir == "" {
 		return 0
 	}
@@ -579,7 +579,7 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 		rollbackProgress()
 		resumeBytes := int64(0)
 		if useCheckpoint {
-			resumeBytes = c.checkpointResumeBytes(localPath, key, ckptDir, size)
+			resumeBytes = c.checkpointResumeBytes(localPath, key, ckptDir)
 		}
 		resumePending := resumeBytes > 0
 
