@@ -60,3 +60,26 @@ func TestDynamicLimiterAcquireHonorsContext(t *testing.T) {
 	if err := l.Acquire(ctx); err == nil { t.Fatal("Acquire should return context deadline") }
 	l.Release()
 }
+
+func TestApplyRuntimeConfigUpdatesActiveLimiters(t *testing.T) {
+	oldParallel := runtimeParallel.Load()
+	files := NewDynamicLimiter(2)
+	datasets := NewDynamicLimiter(1)
+	registerUploadLimiter(files)
+	registerDatasetLimiter(datasets)
+	defer func() {
+		unregisterUploadLimiter(files)
+		unregisterDatasetLimiter(datasets)
+		runtimeParallel.Store(oldParallel)
+	}()
+
+	ApplyRuntimeConfig(map[string]string{
+		"jobs": "5", "ds_jobs": "3", "parallel": "7",
+		"max_jobs": "20", "max_parallel": "8",
+	})
+	_, fileLimit := files.Stats()
+	_, datasetLimit := datasets.Stats()
+	if fileLimit != 15 { t.Fatalf("file limit = %d, want 15", fileLimit) }
+	if datasetLimit != 3 { t.Fatalf("dataset limit = %d, want 3", datasetLimit) }
+	if got := CurrentUploadParallel(4); got != 7 { t.Fatalf("parallel = %d, want 7", got) }
+}
