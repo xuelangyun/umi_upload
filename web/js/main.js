@@ -94,4 +94,4 @@ async function poll(tick) {
   if (S.busy || s.scan.running) S.timer = setTimeout(() => poll(true), 600);
 }
 
-prt(); poll();
+pollBandwidth(); prt(); poll();
