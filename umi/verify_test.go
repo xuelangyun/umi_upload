@@ -1,6 +1,8 @@
 package umi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -41,6 +43,39 @@ func (f *verifyFakeOSS) UploadFile(string, string, int64, string, func(int64), f
 }
 func (f *verifyFakeOSS) TestBucket() error { return nil }
 func (f *verifyFakeOSS) SetNetCallback(NetWaitCallback) {}
+
+func TestRemoteCommitRejectsManifestWithInvalidRevision(t *testing.T) {
+	manifest := Manifest{
+		SchemaVersion: 1,
+		DatasetID:     "dataset",
+		CaptureDate:   "2026-11-23",
+		DatasetType:   "test",
+		Files:         []ManifestFile{{Path: "payload.bin", Size: 4, SHA256: "abc"}},
+		Revision:      "raw-not-derived-from-content",
+		CreatedAt:     "2026-11-23T00:00:00.000Z",
+	}
+	manifestBytes, err := jsonMarshalNoEscape(manifest, "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(manifestBytes)
+	marker := ReadyMarker{
+		SchemaVersion:  1,
+		Revision:       manifest.Revision,
+		ManifestSHA256: hex.EncodeToString(sum[:]),
+	}
+	markerBytes, err := jsonMarshalNoEscape(marker, "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &verifyFakeOSS{objects: map[string][]byte{
+		"oss://test/dataset/manifest.json": manifestBytes,
+		"oss://test/dataset/_READY":         markerBytes,
+	}}
+	if _, err := RemoteCommit(fake, "oss://test/dataset/"); err == nil {
+		t.Fatal("RemoteCommit accepted a manifest whose revision does not match its content")
+	}
+}
 
 func TestVerifyOneRejectsMismatchedReadyManifest(t *testing.T) {
 	src := t.TempDir()
