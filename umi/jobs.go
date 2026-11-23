@@ -184,7 +184,7 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 }
 
 func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string) {
-	ApplyCfg()
+	c = ApplyCfg()
 	workers := 1
 	if action != "verify_deep" {
 		if n, err := strconv.Atoi(c["ds_jobs"]); err == nil && n > 1 {
@@ -192,6 +192,16 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 		}
 	}
 
+	if action == "upload" {
+		maxFiles := configInt(c, "max_jobs", 48)
+		initial := workers * configInt(c, "jobs", 16)
+		if initial > maxFiles { initial = maxFiles }
+		if initial < 1 { initial = 1 }
+		job.UploadLimiter = NewDynamicLimiter(initial)
+		registerUploadLimiter(job.UploadLimiter)
+		stopTuner := StartBandwidthTuner(job, c)
+		defer func() { stopTuner(); unregisterUploadLimiter(job.UploadLimiter); job.UploadLimiter = nil }()
+	}
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for i, r := range recs {
