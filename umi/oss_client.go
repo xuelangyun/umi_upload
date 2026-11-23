@@ -2,10 +2,10 @@ package umi
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"context"
 	"errors"
 	"fmt"
 	"io"
