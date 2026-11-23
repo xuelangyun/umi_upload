@@ -166,3 +166,22 @@ td.vlink{color:var(--ac)}.fold{margin-left:6px;opacity:.65}.fold:hover{opacity:1
 .bandwidth-metrics b{font:600 12px var(--mono);font-variant-numeric:tabular-nums}
 .bandwidth-reason{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mu);font-size:11px}
 @media(max-width:900px){.bandwidth-card{gap:10px;flex-wrap:wrap}.bandwidth-title{min-width:100%}.bandwidth-metrics{flex-wrap:wrap;gap:8px 18px}.bandwidth-reason{flex-basis:100%;margin-left:0}}
+
+/* 顶部布局：数据源左侧，右侧上下放置上传进度与带宽调优卡片 */
+.top{grid-template-rows:minmax(0,1fr) auto;align-items:stretch}
+.top>.src{grid-row:1 / span 2}
+.top>.pp{padding:7px 12px;gap:5px;justify-content:center}
+.top>.pp .pp-head{gap:14px}
+.top>.pp .pct{font-size:26px}
+.top>.pp .metrics{gap:10px}
+.top>.bandwidth-card{margin:0;padding:5px 10px;gap:10px;box-shadow:none;min-height:0}
+.top>.bandwidth-card .bandwidth-title{min-width:150px;gap:6px}
+.top>.bandwidth-card .bandwidth-metrics{gap:clamp(8px,1.4vw,18px)}
+.top>.bandwidth-card .bandwidth-metrics span{gap:4px}
+.top>.bandwidth-card .bandwidth-reason{font-size:10px}
+@media(max-width:900px){
+  .top{grid-template-rows:auto;align-items:stretch}
+  .top>.src{grid-row:auto}
+  .top>.bandwidth-card{padding:7px 10px}
+  .top>.bandwidth-card .bandwidth-title{min-width:100%}
+}
