@@ -268,7 +268,7 @@ func (ah *AheadHasher) run() {
 			return
 		default:
 		}
-		sum, err := HashFile(it.Path, ah.ctx)
+		sum, err := hashFileWithStop(it.Path, ah.ctx, ah.stop)
 		if err != nil {
 			ah.err = err
 			return
@@ -279,6 +279,9 @@ func (ah *AheadHasher) run() {
 
 func (ah *AheadHasher) Stop() {
 	ah.once.Do(func() { close(ah.stop) })
+	// Do not let a background hash continue consuming disk and CPU after
+	// its owning upload pipeline has already failed or returned.
+	<-ah.done
 }
 
 func (ah *AheadHasher) Result() (map[string]string, error) {
