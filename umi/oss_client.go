@@ -443,10 +443,7 @@ func (c *AliyunOSSClient) UploadFile(localPath, key string, size int64, ckptDir 
 		return NewUploadError("本地文件大小无效: %s", localPath)
 	}
 
-	parallel := c.params.Parallel
-	if parallel < 1 {
-		parallel = 4
-	}
+	parallel := CurrentUploadParallel(c.params.Parallel)
 
 	// All local files go through the SDK v2 file-path API. Uploader.UploadFile
 	// internally uses PutObject for files smaller than PartSize and multipart
