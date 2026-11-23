@@ -227,6 +227,17 @@ type s3ProgressHook struct {
 	onDelta func(int64)
 }
 
+func cappedProgressDelta(current, total, delta int64) int64 {
+	if delta <= 0 || current >= total {
+		return 0
+	}
+	remaining := total - current
+	if delta > remaining {
+		return remaining
+	}
+	return delta
+}
+
 func (r *s3ProgressHook) Read(p []byte) (int, error) {
 	if len(p) > 0 && r.onDelta != nil {
 		r.onDelta(int64(len(p)))
@@ -240,12 +251,13 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 	}
 	parallel := CurrentUploadParallel(c.params.Parallel)
 
-	var reported int64
+	var reported, progressReported int64
 	var progressMu sync.Mutex
 	rollbackProgress := func() {
 		progressMu.Lock()
-		n := reported
+		n := progressReported
 		reported = 0
+		progressReported = 0
 		progressMu.Unlock()
 		if n > 0 && onProgress != nil {
 			onProgress(-n)
@@ -265,9 +277,11 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 			}
 			progressMu.Lock()
 			reported += n
+			progressDelta := cappedProgressDelta(progressReported, size, n)
+			progressReported += progressDelta
 			progressMu.Unlock()
-			if onProgress != nil {
-				onProgress(n)
+			if progressDelta > 0 && onProgress != nil {
+				onProgress(progressDelta)
 			}
 			if onTraffic != nil {
 				onTraffic(n)
@@ -294,16 +308,15 @@ func (c *S3CompatibleClient) UploadFile(localPath, key string, size int64, _ str
 		}
 
 		progressMu.Lock()
-		remaining := size - reported
-		reported = size
+		remainingProgress := size - progressReported
+		remainingTraffic := size - reported
+		progressReported = size
 		progressMu.Unlock()
-		if remaining > 0 {
-			if onProgress != nil {
-				onProgress(remaining)
-			}
-			if onTraffic != nil {
-				onTraffic(remaining)
-			}
+		if remainingProgress > 0 && onProgress != nil {
+			onProgress(remainingProgress)
+		}
+		if remainingTraffic > 0 && onTraffic != nil {
+			onTraffic(remainingTraffic)
 		}
 		return nil
 	})
