@@ -53,9 +53,9 @@ jobs:
             echo "自动构建自 `main` 分支提交 `${SHORT_SHA}`。"
             echo ""
             echo "### SHA-256"
-            echo ' ```text'
+            echo '```text'
             cat dist/SHA256SUMS.txt
-            echo ' ```'
+            echo '```'
           } > "${NOTES_FILE}"
 
           if gh release view "${REL_TAG}" >/dev/null 2>&1; then
