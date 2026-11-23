@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -292,6 +293,37 @@ type CommitInfo struct {
 	Manifest Manifest
 }
 
+func validateManifestFiles(files []ManifestFile) error {
+	if len(files) == 0 {
+		return NewUploadError("manifest 文件清单不能为空")
+	}
+	seen := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		if f.Path == "" || strings.Contains(f.Path, "\\") || strings.ContainsAny(f.Path, "\x00\r\n") || strings.HasPrefix(f.Path, "/") || path.Clean(f.Path) != f.Path || f.Path == "." {
+			return NewUploadError("manifest 文件路径非法: %q", f.Path)
+		}
+		for _, part := range strings.Split(f.Path, "/") {
+			if err := SafePart(part); err != nil {
+				return NewUploadError("manifest 文件路径非法: %q", f.Path)
+			}
+		}
+		if f.Size < 0 {
+			return NewUploadError("manifest 文件大小非法: %q", f.Path)
+		}
+		if len(f.SHA256) != 64 {
+			return NewUploadError("manifest 文件 SHA256 格式非法: %q", f.Path)
+		}
+		if _, err := hex.DecodeString(f.SHA256); err != nil {
+			return NewUploadError("manifest 文件 SHA256 格式非法: %q", f.Path)
+		}
+		if _, exists := seen[f.Path]; exists {
+			return NewUploadError("manifest 存在重复文件路径: %q", f.Path)
+		}
+		seen[f.Path] = struct{}{}
+	}
+	return nil
+}
+
 func jsonMarshalNoEscape(v any, indent string) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -309,24 +341,42 @@ func jsonMarshalNoEscape(v any, indent string) ([]byte, error) {
 	return b, nil
 }
 
-func MakeManifest(ds *DatasetMeta, files []ManifestFile) (Manifest, error) {
+func manifestRevision(datasetID, captureDate, datasetType string, files []ManifestFile) (string, error) {
 	sorted := make([]ManifestFile, len(files))
 	copy(sorted, files)
 	sort.Slice(sorted, func(i, j int) bool {
 		return UTF16Compare(sorted[i].Path, sorted[j].Path) < 0
 	})
 	id := manifestIdentity{
-		DatasetID:   ds.Name,
-		CaptureDate: ds.CaptureDate,
-		DatasetType: ds.Type,
+		DatasetID:   datasetID,
+		CaptureDate: captureDate,
+		DatasetType: datasetType,
 		Files:       sorted,
 	}
 	compact, err := jsonMarshalNoEscape(id, "")
 	if err != nil {
-		return Manifest{}, err
+		return "", err
 	}
 	sum := sha256.Sum256(compact)
-	rev := "raw-" + hex.EncodeToString(sum[:])[:32]
+	return "raw-" + hex.EncodeToString(sum[:])[:32], nil
+}
+
+func MakeManifest(ds *DatasetMeta, files []ManifestFile) (Manifest, error) {
+	if ds == nil || ds.Name == "" || ds.CaptureDate == "" || ds.Type == "" {
+		return Manifest{}, NewUploadError("数据集标识字段不能为空")
+	}
+	if err := validateManifestFiles(files); err != nil {
+		return Manifest{}, NewUploadError("本地文件清单非法: %v", err)
+	}
+	sorted := make([]ManifestFile, len(files))
+	copy(sorted, files)
+	sort.Slice(sorted, func(i, j int) bool {
+		return UTF16Compare(sorted[i].Path, sorted[j].Path) < 0
+	})
+	rev, err := manifestRevision(ds.Name, ds.CaptureDate, ds.Type, sorted)
+	if err != nil {
+		return Manifest{}, err
+	}
 	now := time.Now().UTC()
 	createdAt := fmt.Sprintf("%s.%03dZ", now.Format("2006-01-02T15:04:05"), now.Nanosecond()/1e6)
 	return Manifest{
@@ -377,6 +427,22 @@ func RemoteCommit(oss OSSClient, rawURI string) (*CommitInfo, error) {
 	var manifest Manifest
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return nil, NewUploadError("远端 manifest.json 格式损坏: %s", rawURI)
+	}
+	if manifest.SchemaVersion != 1 {
+		return nil, NewUploadError("远端 manifest.json schema_version 不受支持: %s", rawURI)
+	}
+	if manifest.DatasetID == "" || manifest.CaptureDate == "" || manifest.DatasetType == "" {
+		return nil, NewUploadError("远端 manifest.json 数据集标识字段为空: %s", rawURI)
+	}
+	if err := validateManifestFiles(manifest.Files); err != nil {
+		return nil, NewUploadError("远端 manifest.json 文件清单非法: %s: %v", rawURI, err)
+	}
+	expectedRevision, err := manifestRevision(manifest.DatasetID, manifest.CaptureDate, manifest.DatasetType, manifest.Files)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Revision == "" || manifest.Revision != expectedRevision {
+		return nil, NewUploadError("远端 manifest.json revision 与清单内容不一致: %s", rawURI)
 	}
 	mSum := sha256.Sum256(manifestBytes)
 	mHex := hex.EncodeToString(mSum[:])

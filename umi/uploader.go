@@ -268,7 +268,7 @@ func (ah *AheadHasher) run() {
 			return
 		default:
 		}
-		sum, err := HashFile(it.Path, ah.ctx)
+		sum, err := hashFileWithStop(it.Path, ah.ctx, ah.stop)
 		if err != nil {
 			ah.err = err
 			return
@@ -279,6 +279,9 @@ func (ah *AheadHasher) run() {
 
 func (ah *AheadHasher) Stop() {
 	ah.once.Do(func() { close(ah.stop) })
+	// Do not let a background hash continue consuming disk and CPU after
+	// its owning upload pipeline has already failed or returned.
+	<-ah.done
 }
 
 func (ah *AheadHasher) Result() (map[string]string, error) {
@@ -385,10 +388,12 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		}
 
 		if sz, ok := skipRemote[it.Rel]; ok && sz == it.Size {
-			AddSent(ctx, it.Size)
+			AddProgressSent(ctx, it.Size)
 		} else {
 			uerr := oss.UploadFile(it.Path, keyPrefix+it.Rel, it.Size, ckptSubDir, func(delta int64) {
-				AddSent(ctx, delta)
+				AddProgressSent(ctx, delta)
+			}, func(delta int64) {
+				AddNetworkTraffic(ctx, delta)
 			})
 			if uerr != nil {
 				errMu.Lock()
@@ -435,16 +440,39 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		PL.Unlock()
 	}
 
-	sem := make(chan struct{}, jobsN)
+	limiter := uploadLimiterFor(ctx, jobsN)
+	shouldStopScheduling := func() bool {
+		errMu.Lock()
+		failed := firstErr != nil
+		errMu.Unlock()
+		return failed || AppCtx.Err() != nil
+	}
 	if order == "pipeline" {
 		var wg sync.WaitGroup
 		for gi, g := range groups {
+			if shouldStopScheduling() {
+				break
+			}
 			for _, idx := range g.Indices {
+				if shouldStopScheduling() {
+					break
+				}
+				if err := limiter.Acquire(AppCtx); err != nil {
+					errMu.Lock()
+					if firstErr == nil { firstErr = err }
+					errMu.Unlock()
+					break
+				}
+				// A previous upload may have failed while Acquire was waiting.
+				// Release the slot instead of scheduling a no-op goroutine.
+				if shouldStopScheduling() {
+					limiter.Release()
+					break
+				}
 				wg.Add(1)
-				sem <- struct{}{}
 				go func(groupI, itemI int) {
 					defer wg.Done()
-					defer func() { <-sem }()
+					defer limiter.Release()
 					uploadSingle(groupI, itemI)
 				}(gi, idx)
 			}
@@ -452,20 +480,29 @@ func UploadOrdered(ctx *JobContext, oss OSSClient, ds *DatasetMeta, inv []InvIte
 		wg.Wait()
 	} else {
 		for gi, g := range groups {
+			if shouldStopScheduling() { break }
 			var wg sync.WaitGroup
 			for _, idx := range g.Indices {
+				if shouldStopScheduling() { break }
+				if err := limiter.Acquire(AppCtx); err != nil {
+					errMu.Lock()
+					if firstErr == nil { firstErr = err }
+					errMu.Unlock()
+					break
+				}
+				if shouldStopScheduling() {
+					limiter.Release()
+					break
+				}
 				wg.Add(1)
-				sem <- struct{}{}
 				go func(groupI, itemI int) {
 					defer wg.Done()
-					defer func() { <-sem }()
+					defer limiter.Release()
 					uploadSingle(groupI, itemI)
 				}(gi, idx)
 			}
 			wg.Wait()
-			if firstErr != nil {
-				break
-			}
+			if firstErr != nil { break }
 		}
 	}
 
@@ -486,7 +523,7 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 	hasher := StartAheadHasher(ctx, sortedInv)
 	defer hasher.Stop()
 
-	sem := make(chan struct{}, jobsN)
+	limiter := uploadLimiterFor(ctx, jobsN)
 	for gi, g := range groups {
 		var gSize int64
 		for _, k := range g.Indices {
@@ -505,14 +542,33 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 		var errMu sync.Mutex
 		var firstErr error
 		var wg sync.WaitGroup
+		shouldStopGroupScheduling := func() bool {
+			errMu.Lock()
+			failed := firstErr != nil
+			errMu.Unlock()
+			return failed || AppCtx.Err() != nil
+		}
 
 		for _, idx := range g.Indices {
+			if shouldStopGroupScheduling() {
+				break
+			}
 			it := sortedInv[idx]
+			if err := limiter.Acquire(AppCtx); err != nil {
+				errMu.Lock()
+				if firstErr == nil { firstErr = err }
+				errMu.Unlock()
+				break
+			}
+			// A sibling may have failed while this goroutine waited for a slot.
+			if shouldStopGroupScheduling() {
+				limiter.Release()
+				break
+			}
 			wg.Add(1)
-			sem <- struct{}{}
 			go func(item InvItem) {
 				defer wg.Done()
-				defer func() { <-sem }()
+				defer limiter.Release()
 
 				errMu.Lock()
 				failed := firstErr != nil
@@ -522,10 +578,12 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 				}
 
 				if sz, ok := skipRemote[item.Rel]; ok && sz == item.Size {
-					AddSent(ctx, item.Size)
+					AddProgressSent(ctx, item.Size)
 				} else {
 					uerr := oss.UploadFile(item.Path, keyPrefix+item.Rel, item.Size, ckptSubDir, func(delta int64) {
-						AddSent(ctx, delta)
+						AddProgressSent(ctx, delta)
+					}, func(delta int64) {
+						AddNetworkTraffic(ctx, delta)
 					})
 					if uerr != nil {
 						errMu.Lock()
@@ -544,6 +602,9 @@ func uploadBySliceVerified(ctx *JobContext, oss OSSClient, ds *DatasetMeta, sort
 		wg.Wait()
 		if firstErr != nil {
 			return nil, firstErr
+		}
+		if err := AppCtx.Err(); err != nil {
+			return nil, err
 		}
 
 		// Verify remote folder list immediately after slice finishes

@@ -2,7 +2,7 @@
    加列：在对应的 *_COLS 里加一项（表头 + 取值函数）即可，不用改别处。 */
 const pathCell = v => `<td class="cp" data-v="${esc(v)}" title="${esc(v)}（点击复制）">${esc(v)}</td>`;
 const remoteTag = v => !v ? '<span class="muted">—</span>' : tag(v.status + (v.deep ? '·深' : ''), cls(v.status),
-  v.error || `本地${v.local_files} 远端${v.remote_files} 缺${(v.missing || []).length} 多${(v.extra || []).length} 大小差${(v.size_diff || []).length} 哈希差${(v.hash_diff || []).length}｜${v.checked_at}`);
+  v.error || `本地${v.local_files} 远端${v.remote_files} 缺${(v.missing || []).length} 多${(v.extra || []).length} 大小差${(v.size_diff || []).length} 哈希差${(v.hash_diff || []).length} 清单差${(v.manifest_diff || []).length}｜${v.checked_at}`);
 
 /* 「房间」单元格：点击在本机文件管理器里打开对应的 PRT 文件夹。
    颜色：橙色 = 不是 PRT_WX_room002（3 位）格式；紫色 = OSS 路径与本地目录名不同（被界面覆盖/补零）。 */

@@ -194,7 +194,15 @@ func GetCfg() map[string]string {
 
 func ApplyCfg() map[string]string {
 	c := GetCfg()
-	setActiveCfg(c)
+	ApplyActiveRuntimeConfig(c, false)
+	return c
+}
+
+// ApplyUploadCfg starts a new upload from the saved baseline while publishing
+// the active settings atomically with the runtime limiter reset.
+func ApplyUploadCfg() map[string]string {
+	c := GetCfg()
+	ApplyActiveRuntimeConfig(c, true)
 	return c
 }
 

@@ -1,6 +1,7 @@
 package umi
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -72,6 +73,24 @@ func (m *Meter) Speed() float64 {
 	return float64(diff) / dt
 }
 
+// HasRecentActivity reports whether the SDK observed outbound upload
+// activity within the supplied interval. Depending on the storage SDK this may
+// represent request-body bytes read or successfully completed multipart parts;
+// it is an activity signal, not a server-side or WAN-interface counter.
+func (m *Meter) HasRecentActivity(within time.Duration) bool {
+	if m == nil || within <= 0 {
+		return false
+	}
+	now := nowSec()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.q) == 0 {
+		return false
+	}
+	age := now - m.q[len(m.q)-1].t
+	return age >= 0 && age <= within.Seconds()
+}
+
 // JobItem tracks one dataset inside a batch Job.
 type JobItem struct {
 	Rel   string `json:"rel"`
@@ -107,6 +126,8 @@ type JobContext struct {
 
 // Job represents an entire batch upload / verify / verify_deep run.
 type Job struct {
+	UploadLimiter *DynamicLimiter
+	DatasetLimiter *DynamicLimiter
 	ID         string
 	Action     string
 	RunID      int64
@@ -148,27 +169,37 @@ func CtxLog(ctx *JobContext, text string) {
 	JobLog(ctx.Parent, ctx.Tag, text)
 }
 
-func AddSent(ctx *JobContext, n int64) {
-	if ctx == nil {
-		return
-	}
+// AddProgressSent updates logical progress without changing the throughput
+// meter, so resumed and pre-existing bytes do not fabricate network activity.
+func AddProgressSent(ctx *JobContext, n int64) {
+	if ctx == nil { return }
 	PL.Lock()
 	p := &ctx.Prog
 	next := p.Sent + n
-	if next < 0 {
-		next = 0
-	}
-	if p.Total > 0 && next > p.Total {
-		next = p.Total
-	}
+	if next < 0 { next = 0 }
+	if p.Total > 0 && next > p.Total { next = p.Total }
 	p.Sent = next
 	PL.Unlock()
-	if ctx.Parent != nil && ctx.Parent.M != nil {
+}
+
+func AddNetworkTraffic(ctx *JobContext, n int64) {
+	if n > 0 && ctx != nil && ctx.Parent != nil && ctx.Parent.M != nil {
 		ctx.Parent.M.Add(n)
 	}
 }
 
+func AddSent(ctx *JobContext, n int64) {
+	AddProgressSent(ctx, n)
+	AddNetworkTraffic(ctx, n)
+}
+
 func HashFile(path string, ctx *JobContext) (string, error) {
+	return hashFileWithStop(path, ctx, nil)
+}
+
+// hashFileWithStop checks the caller's stop signal between bounded reads so
+// background pre-hashing can stop promptly after an upload failure.
+func hashFileWithStop(path string, ctx *JobContext, stop <-chan struct{}) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -177,8 +208,12 @@ func HashFile(path string, ctx *JobContext) (string, error) {
 	h := sha256.New()
 	buf := make([]byte, 4*1024*1024)
 	for {
-		if AppCtx.Err() != nil {
+		select {
+		case <-stop:
+			return "", context.Canceled
+		case <-AppCtx.Done():
 			return "", AppCtx.Err()
+		default:
 		}
 		n, rerr := f.Read(buf)
 		if n > 0 {

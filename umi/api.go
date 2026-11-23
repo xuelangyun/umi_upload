@@ -39,6 +39,9 @@ var cfgNumBounds = map[string][2]int{
 	"ds_jobs":  {1, 32},
 	"wan":      {1, 16},
 	"net_wait": {0, 10080},
+	"target_mbps": {0, 100000},
+	"max_jobs": {1, 512},
+	"max_parallel": {1, 64},
 }
 
 var cfgEnums = map[string][]string{
@@ -46,6 +49,7 @@ var cfgEnums = map[string][]string{
 	"method":       {"sdk", "ossutil"},
 	"order":        {"folder", "slice", "pipeline"},
 	"ossutil_unit": {"slice", "session"},
+	"auto_tune": {"true", "false"},
 }
 
 var cfgAllowedKeys = map[string]bool{
@@ -65,6 +69,10 @@ var cfgAllowedKeys = map[string]bool{
 	"ossutil_path": true,
 	"ossutil_args": true,
 	"net_wait":     true,
+	"target_mbps":  true,
+	"auto_tune":    true,
+	"max_jobs":     true,
+	"max_parallel": true,
 }
 
 func cfgCheck(k, v string) string {
@@ -92,7 +100,7 @@ func cfgCheck(k, v string) string {
 		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
 			return fmt.Sprintf("%s 必须是数字", k)
 		}
-		if n < lo || n > hi || (k != "net_wait" && n != math.Trunc(n)) {
+		if n < lo || n > hi || (k != "net_wait" && k != "target_mbps" && n != math.Trunc(n)) {
 			kind := "整数"
 			if k == "net_wait" {
 				kind = "数"
@@ -882,6 +890,14 @@ func NewHandler(webFS fs.FS) http.Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 		}
+	})
+
+	mux.HandleFunc("/api/bandwidth", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, CurrentBandwidthTuneStatus())
 	})
 
 	mux.HandleFunc("/api/net/plan", func(w http.ResponseWriter, r *http.Request) {
