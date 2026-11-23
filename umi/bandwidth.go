@@ -105,7 +105,11 @@ func ApplyRuntimeConfig(cfg map[string]string) {
 	limiter := activeUploadLimiter
 	runtimeTuneMu.RUnlock()
 	maxParallel := configInt(cfg, "max_parallel", 12)
-	if maxParallel < parallel { maxParallel = parallel } // preserve legacy manual parallel settings
+	// max_parallel is a hard runtime ceiling. Lowering it changes only future
+	// object uploads; already-running multipart uploads keep their own settings.
+	if parallel > maxParallel {
+		parallel = maxParallel
+	}
 	runtimeParallel.Store(int64(parallel))
 	if limiter != nil { limiter.SetLimit(min(jobs*dsJobs, configInt(cfg, "max_jobs", 48))) }
 	runtimeTuneMu.RLock()
