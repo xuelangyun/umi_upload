@@ -312,11 +312,33 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 
 				switch decision.action {
 				case "files":
-					job.UploadLimiter.SetLimit(decision.fileLimit)
-					JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", decision.fileLimit, speed, target))
+					runtimeConfigMu.Lock()
+					latestCfg := ActiveCfg()
+					_, currentLimit := job.UploadLimiter.Stats()
+					nextLimit := decision.fileLimit
+					if ceiling := configInt(latestCfg, "max_jobs", 48); nextLimit > ceiling {
+						nextLimit = ceiling
+					}
+					if nextLimit > currentLimit {
+						job.UploadLimiter.SetLimit(nextLimit)
+					}
+					runtimeConfigMu.Unlock()
+					decision.fileLimit = nextLimit
+					JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextLimit, speed, target))
 				case "parts":
-					runtimeParallel.Store(int64(decision.parallel))
-					JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", decision.parallel, speed, target))
+					runtimeConfigMu.Lock()
+					latestCfg := ActiveCfg()
+					currentParallel := CurrentUploadParallel(4)
+					nextParallel := currentParallel + 1
+					if ceiling := configInt(latestCfg, "max_parallel", 12); nextParallel > ceiling {
+						nextParallel = ceiling
+					}
+					if nextParallel > currentParallel {
+						runtimeParallel.Store(int64(nextParallel))
+					}
+					runtimeConfigMu.Unlock()
+					decision.parallel = nextParallel
+					JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", nextParallel, speed, target))
 				}
 				setBandwidthTuneStatus(BandwidthTuneStatus{
 					Enabled: enabled, TargetMbps: target, CurrentMbps: speed,
