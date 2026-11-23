@@ -71,34 +71,39 @@ function renderLog(lines) {
 }
 
 
-/* 独立带宽状态条：使用后端 /api/bandwidth 的真实调优状态 */
+/* 独立带宽状态：指标实时刷新，最近一次并发调整常驻显示 */
 const BW_STATE_LABEL = {
-  idle: '等待上传任务', monitoring: '启动监控', waiting: '等待上传活动',
-  manual: '普通模式', holding: '保持当前并发',
-  'increasing-files': '正在增加文件并发',
-  'increasing-parts': '正在增加分片并发',
-  'task-limited': '任务数量不足', 'limit-reached': '已达并发上限'
+  idle: '等待任务', monitoring: '监控中', waiting: '等待上传',
+  manual: '普通模式', holding: '保持并发',
+  'increasing-files': '文件并发已增加',
+  'increasing-parts': '分片并发已增加',
+  'task-limited': '文件不足', 'limit-reached': '达到上限'
 };
+function setBandwidthText(id, value) {
+  const el = $(id);
+  if (el && el.textContent !== value) el.textContent = value;
+}
 async function pollBandwidth() {
   if (S.stopped) return;
   try {
-    const r = await fetch('/api/bandwidth');
+    const r = await fetch('/api/bandwidth', {cache: 'no-store'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const b = await r.json();
     const state = b.state || 'idle';
     const active = state !== 'idle';
     const enabled = b.enabled === true;
-    $('bwState').textContent = active && !enabled ? '普通模式' : (BW_STATE_LABEL[state] || state);
-    $('bwState').className = 'bw-state' + (active && enabled && !['waiting','manual','limit-reached','task-limited'].includes(state) ? ' running' : ['waiting','task-limited','limit-reached'].includes(state) ? ' waiting' : '');
-    $('bwSpeed').textContent = Number(b.current_mbps || 0).toFixed(1) + ' Mbps';
-    $('bwTarget').textContent = !active ? '—' : !enabled ? '未启用' : (Number(b.target_mbps || 0) > 0 ? Number(b.target_mbps).toFixed(0) + ' Mbps' : '自动探索');
-    $('bwFiles').textContent = Number(b.active_files || 0) + ' / ' + Number(b.file_limit || 0);
-    $('bwParts').textContent = String(Number(b.parallel || 0));
-    $('bwReason').textContent = !active ? '上传任务开始后显示实时状态' : !enabled ? '动态调优未启用，当前显示实际上传情况' : (b.reason || '正在采集上传吞吐');
+    setBandwidthText('bwState', active && !enabled ? '普通模式' : (BW_STATE_LABEL[state] || state));
+    const stateEl = $('bwState');
+    stateEl.className = 'bw-state' + (active && enabled && !['waiting','manual','limit-reached','task-limited'].includes(state) ? ' running' : ['waiting','task-limited','limit-reached'].includes(state) ? ' waiting' : '');
+    setBandwidthText('bwSpeed', Number(b.current_mbps || 0).toFixed(1) + ' Mbps');
+    setBandwidthText('bwTarget', !active ? '—' : !enabled ? '关闭' : (Number(b.target_mbps || 0) > 0 ? Number(b.target_mbps).toFixed(0) + ' Mbps' : '自动'));
+    setBandwidthText('bwFiles', Number(b.active_files || 0) + ' / ' + Number(b.file_limit || 0));
+    setBandwidthText('bwParts', String(Number(b.parallel || 0)));
+    setBandwidthText('bwChange', b.change || (active ? '尚未发生并发调整' : '等待上传任务'));
     $('bandwidthCard').classList.toggle('tuning', active && enabled);
   } catch (_) {
-    $('bwState').textContent = '状态暂不可用';
-    $('bwReason').textContent = '无法读取带宽调优状态';
+    setBandwidthText('bwState', '状态连接中断');
+    // Keep the last adjustment message visible during brief API/network errors.
   }
   S.bandwidthTimer = setTimeout(pollBandwidth, 2000);
 }
