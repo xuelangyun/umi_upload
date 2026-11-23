@@ -354,7 +354,8 @@ func TestDecideBandwidthTune(t *testing.T) {
 
 func TestShouldWaitForUploadActivityIncludesIdleJobs(t *testing.T) {
 	tests := []struct {
-		name, enabled, recent bool
+		name string
+		enabled, recent bool
 		want                  bool
 	}{
 		{name: "idle auto tuner waits", enabled: true, recent: false, want: true},
