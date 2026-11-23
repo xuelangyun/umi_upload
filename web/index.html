@@ -144,7 +144,9 @@
       </div>
       <label>网络出口数（WAN）</label><div class="cfg-inline"><input id="c_wan" type="number" min="1" max="16"><button class="btn" data-act="applyNet">套用建议</button></div>
       <div class="muted cfg-hint" id="c_net"></div>
-      <h4 class="sec cfg-subhead">动态带宽调优</h4>
+    </section>
+    <section class="cfg-section cfg-bandwidth">
+      <h4 class="sec">动态带宽调优</h4>
       <label>目标总上传带宽（Mbps，0 = 自动探索最大吞吐）</label><input id="c_target_mbps" type="number" min="0" max="100000" step="10">
       <div class="cfg-two">
         <div><label>自动调优</label><select id="c_auto_tune"><option value="true">开启</option><option value="false">关闭（手动并发）</option></select></div>
