@@ -467,6 +467,16 @@ func isOSSResumeProgress(resumeBytes, inc, transferred int64) bool {
 	return resumeBytes > 0 && inc == resumeBytes && transferred == resumeBytes
 }
 
+func consecutiveOSSPartOffset(nextPart int32, parts []oss.Part, partSize int64) (int32, bool) {
+	for _, part := range parts {
+		if part.PartNumber != nextPart || part.Size != partSize {
+			return nextPart, false
+		}
+		nextPart++
+	}
+	return nextPart, true
+}
+
 // checkpointResumeBytes mirrors the OSS SDK v1.6.1 checkpoint validation and
 // consecutive-full-part calculation. The SDK reports resumed bytes through
 // ProgressFn even though those bytes were transferred in an earlier attempt.
@@ -538,11 +548,10 @@ func (c *AliyunOSSClient) checkpointResumeBytes(localPath, key, ckptDir string) 
 			if err != nil {
 				return 0
 			}
-			for _, part := range page.Parts {
-				if part.PartNumber != checkPartNumber || part.Size != partSize {
-					break outer
-				}
-				checkPartNumber++
+			var consecutive bool
+			checkPartNumber, consecutive = consecutiveOSSPartOffset(checkPartNumber, page.Parts, partSize)
+			if !consecutive {
+				break outer
 			}
 		}
 		return int64(checkPartNumber-1) * partSize
