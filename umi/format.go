@@ -299,7 +299,7 @@ func validateManifestFiles(files []ManifestFile) error {
 	}
 	seen := make(map[string]struct{}, len(files))
 	for _, f := range files {
-		if f.Path == "" || strings.Contains(f.Path, "\\\\") || strings.ContainsAny(f.Path, "\\x00\\r\\n") || strings.HasPrefix(f.Path, "/") || path.Clean(f.Path) != f.Path || f.Path == "." {
+		if f.Path == "" || strings.Contains(f.Path, "\\") || strings.ContainsAny(f.Path, "\x00\r\n") || strings.HasPrefix(f.Path, "/") || path.Clean(f.Path) != f.Path || f.Path == "." {
 			return NewUploadError("manifest 文件路径非法: %q", f.Path)
 		}
 		for _, part := range strings.Split(f.Path, "/") {
