@@ -80,6 +80,8 @@ func (l *DynamicLimiter) Stats() (active, limit int) {
 var (
 	runtimeParallel atomic.Int64
 	runtimeTuneMu sync.RWMutex
+	runtimeConfigMu sync.Mutex
+	runtimeAppliedCfg map[string]string
 	activeUploadLimiter *DynamicLimiter
 	activeDatasetLimiter *DynamicLimiter
 )
@@ -95,27 +97,46 @@ func CurrentUploadParallel(fallback int) int {
 }
 
 func ApplyRuntimeConfig(cfg map[string]string) {
+	runtimeConfigMu.Lock()
+	defer runtimeConfigMu.Unlock()
+
+	previous := runtimeAppliedCfg
+	parallelChanged := previous == nil ||
+		previous["parallel"] != cfg["parallel"] ||
+		previous["max_parallel"] != cfg["max_parallel"]
+	fileLimitChanged := previous == nil ||
+		previous["jobs"] != cfg["jobs"] ||
+		previous["ds_jobs"] != cfg["ds_jobs"] ||
+		previous["max_jobs"] != cfg["max_jobs"]
+	datasetLimitChanged := previous == nil || previous["ds_jobs"] != cfg["ds_jobs"]
+
 	jobs, _ := strconv.Atoi(cfg["jobs"])
 	if jobs < 1 { jobs = 16 }
 	dsJobs, _ := strconv.Atoi(cfg["ds_jobs"])
 	if dsJobs < 1 { dsJobs = 1 }
-	parallel, _ := strconv.Atoi(cfg["parallel"])
-	if parallel < 1 { parallel = 4 }
+
 	runtimeTuneMu.RLock()
 	limiter := activeUploadLimiter
-	runtimeTuneMu.RUnlock()
-	maxParallel := configInt(cfg, "max_parallel", 12)
-	// max_parallel is a hard runtime ceiling. Lowering it changes only future
-	// object uploads; already-running multipart uploads keep their own settings.
-	if parallel > maxParallel {
-		parallel = maxParallel
-	}
-	runtimeParallel.Store(int64(parallel))
-	if limiter != nil { limiter.SetLimit(min(jobs*dsJobs, configInt(cfg, "max_jobs", 48))) }
-	runtimeTuneMu.RLock()
 	dsLimiter := activeDatasetLimiter
 	runtimeTuneMu.RUnlock()
-	if dsLimiter != nil { dsLimiter.SetLimit(dsJobs) }
+
+	// Re-applying unrelated settings (for example target_mbps or auto_tune)
+	// must not erase concurrency already discovered by the running tuner.
+	// Explicit concurrency-setting changes rebase the affected runtime limit.
+	if parallelChanged {
+		parallel, _ := strconv.Atoi(cfg["parallel"])
+		if parallel < 1 { parallel = 4 }
+		maxParallel := configInt(cfg, "max_parallel", 12)
+		if parallel > maxParallel { parallel = maxParallel }
+		runtimeParallel.Store(int64(parallel))
+	}
+	if fileLimitChanged && limiter != nil {
+		limiter.SetLimit(min(jobs*dsJobs, configInt(cfg, "max_jobs", 48)))
+	}
+	if datasetLimitChanged && dsLimiter != nil {
+		dsLimiter.SetLimit(dsJobs)
+	}
+	runtimeAppliedCfg = copyStringMap(cfg)
 }
 
 func registerDatasetLimiter(l *DynamicLimiter) {
