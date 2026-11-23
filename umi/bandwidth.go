@@ -2,6 +2,7 @@ package umi
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -179,6 +180,17 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 	if job == nil || job.Action != "upload" || job.UploadLimiter == nil {
 		return func() {}
 	}
+	initialCfg := ActiveCfg()
+	initialActive, initialLimit := job.UploadLimiter.Stats()
+	initialTarget := configFloat(initialCfg, "target_mbps", 350)
+	initialEnabled := configBool(initialCfg, "auto_tune", true)
+	setBandwidthTuneStatus(BandwidthTuneStatus{
+		Enabled: initialEnabled, TargetMbps: initialTarget,
+		CurrentMbps: job.M.Speed()*8/1e6, ActiveFiles: initialActive,
+		FileLimit: initialLimit, Parallel: CurrentUploadParallel(4),
+		MaxFiles: configInt(initialCfg, "max_jobs", 48),
+		State: "monitoring", Reason: "正在采集上传吞吐",
+	})
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -202,6 +214,8 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 
 				if !enabled {
 					state, reason = "manual", "自动调优已关闭，使用手动配置"
+				} else if active == 0 {
+					state, reason = "waiting", "等待实际文件上传，暂不调整并发"
 				} else if target <= 0 || speed < target*0.95 {
 					if active >= currentLimit && currentLimit < maxFiles {
 						next := currentLimit + 2
@@ -210,11 +224,13 @@ func StartBandwidthTuner(job *Job, _ map[string]string) func() {
 						currentLimit = next
 						reason = "上传任务已占满并发槽，增加文件级并发"
 						state = "increasing-files"
+						JobLog(job, "", fmt.Sprintf("带宽调优：文件并发上限调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", currentLimit, speed, target))
 					} else if parallel < maxParallel {
 						parallel++
 						runtimeParallel.Store(int64(parallel))
 						reason = "提高后续视频的分片并发，补足文件任务数量不足"
 						state = "increasing-parts"
+						JobLog(job, "", fmt.Sprintf("带宽调优：后续文件分片并发调整为 %d，当前吞吐 %.1f Mbps，目标 %.1f Mbps", parallel, speed, target))
 					} else if active < currentLimit {
 						reason = "可用上传文件不足，且分片并发已达到上限"
 						state = "task-limited"
