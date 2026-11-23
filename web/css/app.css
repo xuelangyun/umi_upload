@@ -117,3 +117,37 @@ td.vlink{color:var(--ac)}.fold{margin-left:6px;opacity:.65}.fold:hover{opacity:1
 .bk{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}.bk .tag{font-size:12px}
 #mc .dlg{max-height:90vh;overflow:auto}#mc h4.sec{margin:14px 0 2px;padding-top:10px;border-top:1px solid var(--ln);font-size:13px;color:var(--mu);font-weight:600}#mc h4.sec:first-of-type{border-top:0;margin-top:8px;padding-top:0}
 #mc .dlg-f{position:sticky;bottom:-18px;background:var(--sf);padding:10px 0 2px;margin-top:10px;border-top:1px solid var(--ln)}
+
+/* 配置面板：单一参数入口、双栏紧凑布局，常见桌面分辨率下尽量一次完整显示 */
+#mc .config-dlg{width:min(1040px,96vw);max-height:94vh;padding:14px 18px;overflow:auto}
+#mc .config-head{margin-bottom:4px}
+#mc .cfg-profile{padding:4px 0 8px;border-bottom:1px solid var(--ln)}
+#mc .cfg-profile .sec{margin:4px 0 6px;padding:0;border:0}
+#mc .cfg-profile-row{display:flex;gap:6px;margin-top:6px}
+#mc .cfg-profile-row select,#mc .cfg-profile-row input{flex:1;min-width:0}
+#mc .cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+#mc .cfg-section{min-width:0;padding:7px 0 2px}
+#mc .cfg-section .sec{margin:2px 0 6px;padding-top:6px}
+#mc .cfg-section label{margin:5px 0 2px}
+#mc .cfg-section input,#mc .cfg-section select{height:28px}
+#mc .cfg-two,#mc .cfg-three{display:grid;gap:8px}
+#mc .cfg-two{grid-template-columns:1fr 1fr}
+#mc .cfg-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+#mc .cfg-inline{display:flex;gap:6px}
+#mc .cfg-inline input{flex:1}
+#mc .cfg-hint{margin-top:4px;line-height:1.35}
+#mc .cfg-subhead{margin-top:10px!important}
+#mc .cfg-retry{grid-column:1/-1;border-top:1px solid var(--ln);margin-top:4px}
+#mc #cmsg{min-height:18px;margin-top:4px}
+#mc .dlg-f{position:sticky;bottom:-14px;background:var(--sf);padding:8px 0 2px;margin-top:6px;border-top:1px solid var(--ln)}
+@media(max-width:700px){#mc .cfg-grid{grid-template-columns:1fr}#mc .cfg-retry{grid-column:auto}#mc .cfg-three{gap:5px}#mc .config-dlg{max-height:96vh;padding:12px}}
+
+/* 功能区块卡片化：配置方案、存储、并发、带宽调优、网络恢复各自独立 */
+#mc .cfg-profile{background:var(--sf2,var(--sf));border:1px solid var(--ln);border-radius:10px;padding:9px 12px;margin:8px 0 10px}
+#mc .cfg-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#mc .cfg-section{background:var(--sf2,var(--sf));border:1px solid var(--ln);border-radius:10px;padding:10px 13px 12px}
+#mc .cfg-section .sec{display:flex;align-items:center;gap:8px;border:0;border-bottom:1px solid var(--ln);padding:0 0 8px;margin:0 0 8px;color:var(--tx);font-size:13px;font-weight:650}
+#mc .cfg-section .sec:before{content:"";width:3px;height:15px;border-radius:3px;background:var(--ac);display:inline-block}
+#mc .cfg-retry{grid-column:auto}
+#mc .cfg-hint{font-size:11px}
+@media(max-width:700px){#mc .cfg-grid{grid-template-columns:1fr}#mc .cfg-retry{grid-column:auto}}
