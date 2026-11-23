@@ -195,6 +195,7 @@ func GetCfg() map[string]string {
 func ApplyCfg() map[string]string {
 	c := GetCfg()
 	setActiveCfg(c)
+	ApplyRuntimeConfig(c)
 	return c
 }
 
