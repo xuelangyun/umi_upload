@@ -131,6 +131,12 @@
   <h4 class="sec">并发与多出口负载均衡</h4><label>并发：同时上传的数据集数 / 每数据集同时传的文件数 / 每个大文件的分片并发</label><div class="row"><input id="c_ds_jobs" type="number" min="1"><input id="c_jobs" type="number" min="1"><input id="c_parallel" type="number" min="1"></div>
   <label>网络出口数（多条 WAN 做负载均衡时填；负载均衡按「连接」分流，要把每个出口都跑满，就需要足够多的并发连接）</label><div class="row"><input id="c_wan" type="number" min="1" max="16"><button class="btn" data-act="applyNet" title="按出口数填入建议的并发参数（填入后点「保存」生效）">套用建议并发</button></div>
   <div class="muted" id="c_net" style="min-height:34px"></div>
+  <h4 class="sec">动态上传带宽调优</h4>
+  <label>目标总上传带宽（Mbps；程序会尽量达到，0 = 自动探索当前可达到的最大吞吐）</label><input id="c_target_mbps" type="number" min="0" max="100000" step="10">
+  <label>自动调优</label><select id="c_auto_tune"><option value="true">开启（运行中自动调整）</option><option value="false">关闭（使用手动并发）</option></select>
+  <label>最大文件并发 / 最大分片并发</label><div class="row"><input id="c_max_jobs" type="number" min="1" max="512"><input id="c_max_parallel" type="number" min="1" max="64"></div>
+  <div class="muted">保存后立即更新运行中的文件并发；分片并发对后续开始的对象上传生效，不中断正在传输的文件。自动调优只在带宽低于目标且并发已饱和时逐步增加参数。</div>
+  <div class="muted" id="c_bandwidth_status" style="min-height:24px"></div>
   <h4 class="sec">断网容错与重试</h4>
   <label>断网自动等待（分钟；恢复后重试当前文件/操作，已完成的文件会跳过；超时才算失败，0 = 不等待）</label><input id="c_net_wait" type="number" min="0">
   <div class="muted" id="cmsg" style="margin:8px 0;min-height:18px"></div>
