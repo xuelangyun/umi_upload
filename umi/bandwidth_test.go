@@ -185,6 +185,22 @@ func TestAddNetworkTrafficDoesNotChangeLogicalProgress(t *testing.T) {
 	}
 }
 
+func TestCappedProgressDeltaNeverExceedsObjectSize(t *testing.T) {
+	tests := []struct {
+		current, total, delta, want int64
+	}{
+		{current: 0, total: 100, delta: 40, want: 40},
+		{current: 80, total: 100, delta: 50, want: 20},
+		{current: 100, total: 100, delta: 10, want: 0},
+		{current: 20, total: 100, delta: -5, want: 0},
+	}
+	for _, tt := range tests {
+		if got := cappedProgressDelta(tt.current, tt.total, tt.delta); got != tt.want {
+			t.Errorf("cappedProgressDelta(%d, %d, %d) = %d, want %d", tt.current, tt.total, tt.delta, got, tt.want)
+		}
+	}
+}
+
 func TestS3ProgressHookReportsRequestBodyBytes(t *testing.T) {
 	var reported int64
 	hook := &s3ProgressHook{onDelta: func(n int64) { reported += n }}
