@@ -100,7 +100,7 @@ func cfgCheck(k, v string) string {
 		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
 			return fmt.Sprintf("%s 必须是数字", k)
 		}
-		if n < lo || n > hi || (k != "net_wait" && n != math.Trunc(n)) {
+		if n < lo || n > hi || (k != "net_wait" && k != "target_mbps" && n != math.Trunc(n)) {
 			kind := "整数"
 			if k == "net_wait" {
 				kind = "数"
