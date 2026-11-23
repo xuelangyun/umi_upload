@@ -309,24 +309,36 @@ func jsonMarshalNoEscape(v any, indent string) ([]byte, error) {
 	return b, nil
 }
 
-func MakeManifest(ds *DatasetMeta, files []ManifestFile) (Manifest, error) {
+func manifestRevision(datasetID, captureDate, datasetType string, files []ManifestFile) (string, error) {
 	sorted := make([]ManifestFile, len(files))
 	copy(sorted, files)
 	sort.Slice(sorted, func(i, j int) bool {
 		return UTF16Compare(sorted[i].Path, sorted[j].Path) < 0
 	})
 	id := manifestIdentity{
-		DatasetID:   ds.Name,
-		CaptureDate: ds.CaptureDate,
-		DatasetType: ds.Type,
+		DatasetID:   datasetID,
+		CaptureDate: captureDate,
+		DatasetType: datasetType,
 		Files:       sorted,
 	}
 	compact, err := jsonMarshalNoEscape(id, "")
 	if err != nil {
-		return Manifest{}, err
+		return "", err
 	}
 	sum := sha256.Sum256(compact)
-	rev := "raw-" + hex.EncodeToString(sum[:])[:32]
+	return "raw-" + hex.EncodeToString(sum[:])[:32], nil
+}
+
+func MakeManifest(ds *DatasetMeta, files []ManifestFile) (Manifest, error) {
+	sorted := make([]ManifestFile, len(files))
+	copy(sorted, files)
+	sort.Slice(sorted, func(i, j int) bool {
+		return UTF16Compare(sorted[i].Path, sorted[j].Path) < 0
+	})
+	rev, err := manifestRevision(ds.Name, ds.CaptureDate, ds.Type, sorted)
+	if err != nil {
+		return Manifest{}, err
+	}
 	now := time.Now().UTC()
 	createdAt := fmt.Sprintf("%s.%03dZ", now.Format("2006-01-02T15:04:05"), now.Nanosecond()/1e6)
 	return Manifest{
@@ -377,6 +389,16 @@ func RemoteCommit(oss OSSClient, rawURI string) (*CommitInfo, error) {
 	var manifest Manifest
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return nil, NewUploadError("远端 manifest.json 格式损坏: %s", rawURI)
+	}
+	if manifest.SchemaVersion != 1 {
+		return nil, NewUploadError("远端 manifest.json schema_version 不受支持: %s", rawURI)
+	}
+	expectedRevision, err := manifestRevision(manifest.DatasetID, manifest.CaptureDate, manifest.DatasetType, manifest.Files)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Revision == "" || manifest.Revision != expectedRevision {
+		return nil, NewUploadError("远端 manifest.json revision 与清单内容不一致: %s", rawURI)
 	}
 	mSum := sha256.Sum256(manifestBytes)
 	mHex := hex.EncodeToString(mSum[:])
