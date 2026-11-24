@@ -405,3 +405,13 @@ button,select,.btn{touch-action:manipulation}
   .top>.pp .metric{grid-template-rows:18px 28px}
   .top>.pp .metric b{font-size:13.5px;line-height:28px}
 }
+
+
+/* Keep the mobile toolbar in the same visual hierarchy as the desktop layout. */
+@media(max-width:640px){
+  .toolbar>.tabs{order:0}
+  .toolbar>.fmtseg{order:1}
+  .toolbar>label.check{order:2}
+  .toolbar>#mvGrp{order:3}
+  .toolbar>.btn.act{order:4}
+}
