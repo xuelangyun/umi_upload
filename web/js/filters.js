@@ -4,6 +4,7 @@
 function datasetOverview() {
   const key = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
   if (S.datasetOverviewCache?.key === key) return S.datasetOverviewCache;
+  S.selectionStats = null;
 
   const stats = {total: S.D.length, isuit: 0, umi_v3: 0, warn: 0, misplaced: 0};
   const byId = new Map();
