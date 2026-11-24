@@ -336,7 +336,7 @@ test("dataset filtering caches results and selection counts stay incremental", (
     {umiNormal: 0, umiCalibration: 1},
   );
 
-  vm.runInContext("pruneSelection(new Set(['1']))", context);
+  vm.runInContext("pruneSelection(new Map([['1', true]]))", context);
   assert.deepEqual(
     JSON.parse(vm.runInContext("JSON.stringify(getSelectionStats())", context)),
     {umiNormal: 0, umiCalibration: 0},
