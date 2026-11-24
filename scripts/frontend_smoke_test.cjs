@@ -232,3 +232,175 @@ test("data table sorting and selection controls are keyboard and screen-reader a
   assert.ok(main.includes("event.detail === 0"));
   assert.ok(!main.includes("$('tb').addEventListener('keydown'"));
 });
+
+
+test("dataset filtering caches results and selection counts stay incremental", () => {
+  const context = vm.createContext({});
+  const scripts = [
+    "web/js/util.js",
+    "web/js/api.js",
+    "web/js/panel.js",
+    "web/js/filters.js",
+    "web/js/tables.js",
+  ];
+
+  for (const relativePath of scripts) {
+    const filename = path.resolve(__dirname, "..", relativePath);
+    vm.runInContext(fs.readFileSync(filename, "utf8"), context, {filename});
+  }
+
+  const rows = [
+    {
+      id: "1", fmt: "isuit", type: "normal", device: "D001", cap_date: "2026-11-24",
+      operator: "Bob", task: "Box Sort", sub_task: "A", name: "session-A",
+      source: "C:\\data\\isuit", rel: "C:/data/isuit", location: "LA",
+      device_sn: "SN001", up_state: "未上传", start: 1, size: 10, duration: 20,
+    },
+    {
+      id: "2", fmt: "umi_v3", type: "normal", device: "D002", cap_date: "2026-11-24",
+      operator: "Alice", task: "Medicine Check", sub_task: "B", name: "session-B",
+      source: "D:\\data\\umi", rel: "D:/data/umi", location: "LA",
+      device_sn: "SN002", up_state: "未上传", start: 2, size: 20, duration: 30,
+    },
+    {
+      id: "3", fmt: "umi_v3", type: "calibration", device: "D002", cap_date: "2026-11-24",
+      operator: "Alice", task: "Calibration", sub_task: "C", name: "session-C",
+      source: "D:\\data\\calibration", rel: "D:/data/calibration", location: "LA",
+      device_sn: "SN002", up_state: "已上传", start: 3, size: 5, duration: 10,
+    },
+  ];
+
+  vm.runInContext(
+    "S.D = " + JSON.stringify(rows) +
+      "; S.F = {fmt:'',type:'',device:'',cap_date:'',operator:'',task:'',location:'',status:'',q:''};" +
+      "S.datasetETag = '\"snapshot-1\"'; S.sortK = 'start'; S.sortD = -1;",
+    context,
+  );
+
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(rows().map(row => row.id))", context)),
+    ["3", "2", "1"],
+  );
+  assert.equal(vm.runInContext("rows() === rows()", context), true);
+
+  vm.runInContext("S.F.q = " + JSON.stringify("alice medicine"), context);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(rows().map(row => row.id))", context)),
+    ["2"],
+  );
+
+  vm.runInContext("S.F.q = " + JSON.stringify("C:\\data"), context);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(rows().map(row => row.id))", context)),
+    ["1"],
+  );
+
+  vm.runInContext(
+    "S.F = {fmt:'',type:'',device:'',cap_date:'',operator:'',task:'',location:'',status:'',q:''};" +
+      "setRowSelected('2', true); setRowSelected('3', true);",
+    context,
+  );
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(getSelectionStats())", context)),
+    {umiNormal: 1, umiCalibration: 1},
+  );
+
+  vm.runInContext("setRowSelected('2', false)", context);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(getSelectionStats())", context)),
+    {umiNormal: 0, umiCalibration: 1},
+  );
+
+  vm.runInContext("pruneSelection(new Set(['1']))", context);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(getSelectionStats())", context)),
+    {umiNormal: 0, umiCalibration: 0},
+  );
+  assert.equal(vm.runInContext("S.sel.size", context), 0);
+
+  vm.runInContext("setRowSelected('3', true); clearSelection()", context);
+  assert.equal(vm.runInContext("S.sel.size", context), 0);
+});
+
+
+test("log rendering appends rolling updates without rebuilding existing rows", () => {
+  const log = {
+    children: [],
+    scrollTop: 0,
+    clientHeight: 100,
+    scrollHeight: 0,
+    appendCalls: 0,
+    replaceCalls: 0,
+    get firstElementChild() { return this.children[0] || null; },
+    append(fragment) {
+      this.appendCalls++;
+      this.children.push(...fragment.children);
+      this.scrollHeight = this.children.length * 20;
+    },
+    replaceChildren(fragment) {
+      this.replaceCalls++;
+      this.children = [...fragment.children];
+      this.scrollHeight = this.children.length * 20;
+    },
+  };
+  const onlyErrors = {checked: false};
+  const document = {
+    createDocumentFragment() {
+      return {children: [], append(element) { this.children.push(element); }};
+    },
+    createElement() {
+      return {
+        className: "",
+        textContent: "",
+        remove() {
+          const index = log.children.indexOf(this);
+          if (index >= 0) log.children.splice(index, 1);
+          log.scrollHeight = log.children.length * 20;
+        },
+      };
+    },
+  };
+  const context = vm.createContext({
+    document,
+    $: id => id === "lg" ? log : onlyErrors,
+  });
+
+  for (const relativePath of ["web/js/util.js", "web/js/panel.js"]) {
+    const filename = path.resolve(__dirname, "..", relativePath);
+    vm.runInContext(fs.readFileSync(filename, "utf8"), context, {filename});
+  }
+
+  vm.runInContext('renderLog(["first", "错误"])', context);
+  assert.deepEqual(log.children.map(item => item.textContent), ["first", "错误"]);
+  assert.equal(log.replaceCalls, 1);
+
+  vm.runInContext("renderLog(S.lastLogSource)", context);
+  assert.equal(log.replaceCalls, 1);
+
+  vm.runInContext('renderLog(["错误", "second"])', context);
+  assert.deepEqual(log.children.map(item => item.textContent), ["错误", "second"]);
+  assert.equal(log.replaceCalls, 1);
+
+  onlyErrors.checked = true;
+  vm.runInContext("renderLog(S.lastLogSource)", context);
+  assert.deepEqual(log.children.map(item => item.textContent), ["错误"]);
+  assert.equal(log.replaceCalls, 2);
+
+  vm.runInContext('renderLog(["second", "失败"])', context);
+  assert.deepEqual(log.children.map(item => item.textContent), ["失败"]);
+  assert.equal(log.replaceCalls, 2);
+});
+
+
+test("all-rows mode is wired through the table and upload-history API", () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "..", "web/index.html"), "utf8");
+  const tables = fs.readFileSync(path.resolve(__dirname, "..", "web/js/tables.js"), "utf8");
+  const api = fs.readFileSync(path.resolve(__dirname, "..", "umi/api.go"), "utf8");
+
+  assert.match(html, /<option value="all" selected>全部<\\/option>/);
+  assert.match(tables, /Number\\.isFinite\\(ps\\) \\? S\\.R\\.slice\\(S\\.page \\* ps, \\(S\\.page \\+ 1\\) \\* ps\\) : S\\.R/);
+  assert.match(tables, /button\\.hidden = !Number\\.isFinite\\(ps\\)/);
+  assert.match(api, /allRows := q\\.Get\\("ps"\\) == "all"/);
+  assert.match(api, /ORDER BY start_time DESC, id DESC", args\\.\\.\\.\\)/);
+  assert.match(api, /LIMIT \\? OFFSET \\?/);
+});
