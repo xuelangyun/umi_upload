@@ -184,7 +184,7 @@ async function poll() {
 }
 
 function applyFullState(s, was) {
-  if (!s || !s.scan) return;
+  if (S.stopped || !s || !s.scan) return;
   S.loaded = true; S.lastFull = Date.now();
   S.D = s.datasets || []; S.PR = s.problems || []; S.roots = s.roots || [];
   S.busy = !!(s.job && !s.job.done); S.scanning = !!s.scan.running;
