@@ -427,3 +427,9 @@ button,select,.btn{touch-action:manipulation}
 @media(max-width:640px){
   .notice{margin-inline:12px}
 }
+
+
+/* Preserve compact desktop controls while giving small actions usable touch targets on phones. */
+@media(max-width:640px){
+  .btn.small{min-height:34px}
+}
