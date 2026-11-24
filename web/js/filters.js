@@ -33,50 +33,39 @@ function fillOptions() {
   setOptions('fd', f.device || [], '全部设备'); setOptions('fe', f.cap_date || [], '全部采集日期'); setOptions('fo', f.operator || [], '全部人员');
 }
 
+let recordsController = null;
+let recordsRequestId = 0;
+
+function cancelRecordsRequest() {
+  recordsRequestId++;
+  recordsController?.abort();
+  recordsController = null;
+  $('wr').classList.remove('ld');
+}
+
 async function loadRecords() {
+  recordsController?.abort();
+  const controller = new AbortController();
+  const requestId = ++recordsRequestId;
+  recordsController = controller;
   $('wr').classList.add('ld');
+
   try {
-    const q = new URLSearchParams(Object.assign({}, S.F, {ps: $('ps').value, page: S.page}));
-    S.RS = await (await fetch('/api/uploads?' + q)).json(); S.RH = S.RS.rows; S.facets = S.RS.facets;
-    fillOptions(); draw();
-  } finally { $('wr').classList.remove('ld'); }
-}
-
-/* 数据列表：过滤 + 排序（全部行，分页在 draw 里切） */
-const hit = (r, Q) => { const h = lcs([r.name, r.source, r.task, r.sub_task, r.operator, r.rel, r.location, r.device, r.device_sn].join(' ')).replace(/\\/g, '/'); return Q.every(w => h.includes(w)); };   // 关键字：每个词都出现在（会话目录/本地路径/任务/人员/地点/设备/SN）里
-const lcs = s => (s || '').toLowerCase();
-function datasetOverview() {
-  const key = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
-  if (S.datasetOverviewCache?.key === key) return S.datasetOverviewCache;
-  const stats = {total: S.D.length, isuit: 0, umi_v3: 0, warn: 0, misplaced: 0};
-  const byId = new Map();
-  for (const r of S.D) {
-    byId.set(r.id, r);
-    if (isUmi(r)) stats.umi_v3++;
-    else stats.isuit++;
-    if (movable(r)) stats.misplaced++;
-    if (hasWarn(r)) stats.warn++;
+    const query = new URLSearchParams({...S.F, ps: $('ps').value, page: S.page});
+    const result = await requestJSON('/api/uploads?' + query, {signal: controller.signal});
+    if (requestId !== recordsRequestId) return;
+    if (!Array.isArray(result.rows)) throw new Error('上传记录响应格式不正确');
+    S.RS = result;
+    S.RH = result.rows;
+    S.facets = result.facets || {};
+    fillOptions();
+    draw();
+  } catch (error) {
+    if (error.name !== 'AbortError' && requestId === recordsRequestId) toast(error.message || '读取上传记录失败');
+  } finally {
+    if (requestId === recordsRequestId) {
+      $('wr').classList.remove('ld');
+      recordsController = null;
+    }
   }
-  const result = {key, stats, byId};
-  S.datasetOverviewCache = result;
-  return result;
-}
-
-function rows() {
-  const f = S.F, lc = s => (s || '').toLowerCase(), T = lc(f.task), L = lc(f.location), Q = lc(f.q).replace(/\\/g, '/').split(/\s+/).filter(Boolean);
-  const snapshotKey = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
-  const key = JSON.stringify([snapshotKey, f.fmt || '', f.type || '', f.device || '', f.cap_date || '', f.operator || '', T, L, f.status || '', Q, S.sortK, S.sortD]);
-  if (S.datasetViewCache?.key === key) {
-    S.R = S.datasetViewCache.rows;
-    return S.R;
-  }
-  const result = S.D.filter(r => (!f.fmt || r.fmt === f.fmt) && (!f.type || r.type === f.type) && (!f.device || r.device === f.device) && (!f.cap_date || r.cap_date === f.cap_date)
-    && (!f.operator || r.operator === f.operator) && (!T || lc(r.task).includes(T)) && (!L || lc(r.location).includes(L))
-    && (!f.status || (f.status === 'mis' ? r.misplaced : f.status === 'warn' ? hasWarn(r) : r.up_state === f.status))
-    && (!Q.length || hit(r, Q)))
-    .sort((a, b) => { const x = a[S.sortK], y = b[S.sortK]; return (x > y ? 1 : x < y ? -1 : 0) * S.sortD || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0); });
-  S.R = result;
-  S.datasetViewCache = {key, rows: result};
-  S.datasetFilteredStatsCache = null;
-  return result;
 }

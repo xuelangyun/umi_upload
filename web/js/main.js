@@ -20,7 +20,12 @@ const CHANGE = {
 
 document.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && ACT[el.dataset.act]) ACT[el.dataset.act](el, e); });
 document.addEventListener('change', e => { const el = e.target.closest('[data-change]'); if (el && CHANGE[el.dataset.change]) CHANGE[el.dataset.change](el, e); });
-$('flt').addEventListener('keydown', e => { if (e.key === 'Enter') query(); });
+$('flt').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (e.isComposing || e.keyCode === 229) return;
+  query();
+});
 $('tb').addEventListener('change', onTableChange);
 $('mbody').addEventListener('change', e => { if (e.target.id === 'mvall') $('mbody').querySelectorAll('input[data-mv]:not(:disabled)').forEach(c => c.checked = e.target.checked); });
 $('tb').addEventListener('click', onTableClick);
@@ -30,6 +35,7 @@ document.querySelectorAll('[data-input=prt]').forEach(e => e.addEventListener('i
 /* ---- 主流程 ---- */
 function tab(n) {
   if (n === S.view) return;
+  if (n !== 2) cancelRecordsRequest();
   S.view = n; S.page = 0;
   $('t1').classList.toggle('on', n === 1); $('t2').classList.toggle('on', n === 2);
   setStatusOptions(); fillOptions(); query();            // 沿用已暂存的筛选值，不清空表格，避免抖动
