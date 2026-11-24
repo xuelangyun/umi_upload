@@ -262,6 +262,7 @@ const (
 
 type datasetStartupWaitResult struct {
 	Stable    bool
+	Finished  bool
 	Active    int
 	Limit     int
 	SpeedMbps float64
@@ -294,10 +295,11 @@ func stableUploadSpeed(samples []float64) bool {
 
 // waitForDatasetStartup lets the most recently started dataset establish real
 // upload traffic before the scheduler admits another one. It exits early when
-// the active dataset finishes, ds_jobs is reduced to one, the speed plateaus,
+// that specific dataset finishes, ds_jobs is reduced to one, the speed plateaus,
 // or the job is canceled; the timeout prevents a slow/idle dataset blocking the
-// whole queue indefinitely.
-func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimiter) datasetStartupWaitResult {
+// whole queue indefinitely. Watching the dataset-specific channel matters when
+// ds_jobs > 1 because older datasets may still be running.
+func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimiter, datasetDone <-chan struct{}) datasetStartupWaitResult {
 	started := time.Now()
 	result := datasetStartupWaitResult{}
 	if job == nil || job.M == nil || limiter == nil {
@@ -314,6 +316,15 @@ func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimite
 		if err := ctx.Err(); err != nil {
 			return result
 		}
+		select {
+		case <-datasetDone:
+			result.Finished = true
+			result.Elapsed = time.Since(started)
+			result.SpeedMbps = job.M.Speed() * 8 / 1e6
+			result.Active, result.Limit = limiter.Stats()
+			return result
+		default:
+		}
 
 		active, limit := limiter.Stats()
 		speed := job.M.Speed() * 8 / 1e6
@@ -323,7 +334,7 @@ func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimite
 		result.SpeedMbps = speed
 		result.Elapsed = elapsed
 
-		if active == 0 || limit <= 1 {
+		if limit <= 1 {
 			return result
 		}
 		if elapsed >= datasetStartupMinWait && job.M.HasRecentActivity(10*time.Second) && speed >= datasetStartupMinMbps {
@@ -340,6 +351,12 @@ func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimite
 		}
 
 		select {
+		case <-datasetDone:
+			result.Finished = true
+			result.Elapsed = time.Since(started)
+			result.SpeedMbps = job.M.Speed() * 8 / 1e6
+			result.Active, result.Limit = limiter.Stats()
+			return result
 		case <-ctx.Done():
 			return result
 		case <-timeout.C:
