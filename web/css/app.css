@@ -374,10 +374,6 @@ button,select,.btn{touch-action:manipulation}
 .table-wrap th{cursor:default}
 .table-wrap th button.th-sort{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;text-align:inherit;font:inherit;color:inherit;cursor:pointer}
 .table-wrap th.n button.th-sort{justify-content:flex-end}
-.table-wrap th button.th-sort:hover{color:var(--tx);background:var(--s3)}
-.table-wrap th button.th-sort{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;text-align:inherit;font:inherit;color:inherit;cursor:pointer}
-.table-wrap th.n button.th-sort{justify-content:flex-end}
-.table-wrap th button.th-sort:hover{color:var(--tx);background:var(--s3)}
 .table-wrap tbody tr:hover:not(.dw){background:var(--acs)}
 .seg button:hover:not(:disabled):not(.on){background:var(--acs);color:var(--ac)}
 .tabs button:hover:not(.on){color:var(--tx)}
