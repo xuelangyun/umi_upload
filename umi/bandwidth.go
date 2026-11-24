@@ -251,6 +251,107 @@ func shouldWaitForUploadActivity(enabled, hasRecentActivity bool) bool {
 	return enabled && !hasRecentActivity
 }
 
+const (
+	datasetStartupMinWait     = 5 * time.Second
+	datasetStartupMaxWait     = 15 * time.Second
+	datasetStartupSampleEvery = 2 * time.Second
+	datasetStartupStableCount = 3
+	datasetStartupMaxVariance = 0.15
+	datasetStartupMinMbps     = 1.0
+)
+
+type datasetStartupWaitResult struct {
+	Stable    bool
+	Active    int
+	Limit     int
+	SpeedMbps float64
+	Elapsed   time.Duration
+}
+
+// stableUploadSpeed reports whether the recent samples have formed a usable
+// plateau. A small minimum rate prevents an idle/near-zero meter from looking
+// stable merely because all samples are close to zero.
+func stableUploadSpeed(samples []float64) bool {
+	if len(samples) != datasetStartupStableCount {
+		return false
+	}
+	minSpeed, maxSpeed, total := samples[0], samples[0], 0.0
+	for _, speed := range samples {
+		if speed < datasetStartupMinMbps {
+			return false
+		}
+		if speed < minSpeed {
+			minSpeed = speed
+		}
+		if speed > maxSpeed {
+			maxSpeed = speed
+		}
+		total += speed
+	}
+	average := total / float64(len(samples))
+	return average > 0 && (maxSpeed-minSpeed) <= average*datasetStartupMaxVariance
+}
+
+// waitForDatasetStartup lets the most recently started dataset establish real
+// upload traffic before the scheduler admits another one. It exits early when
+// the active dataset finishes, ds_jobs is reduced to one, the speed plateaus,
+// or the job is canceled; the timeout prevents a slow/idle dataset blocking the
+// whole queue indefinitely.
+func waitForDatasetStartup(ctx context.Context, job *Job, limiter *DynamicLimiter) datasetStartupWaitResult {
+	started := time.Now()
+	result := datasetStartupWaitResult{}
+	if job == nil || job.M == nil || limiter == nil {
+		return result
+	}
+
+	ticker := time.NewTicker(datasetStartupSampleEvery)
+	defer ticker.Stop()
+	timeout := time.NewTimer(datasetStartupMaxWait)
+	defer timeout.Stop()
+
+	samples := make([]float64, 0, datasetStartupStableCount)
+	for {
+		if err := ctx.Err(); err != nil {
+			return result
+		}
+
+		active, limit := limiter.Stats()
+		speed := job.M.Speed() * 8 / 1e6
+		elapsed := time.Since(started)
+		result.Active = active
+		result.Limit = limit
+		result.SpeedMbps = speed
+		result.Elapsed = elapsed
+
+		if active == 0 || limit <= 1 {
+			return result
+		}
+		if elapsed >= datasetStartupMinWait && job.M.HasRecentActivity(10*time.Second) && speed >= datasetStartupMinMbps {
+			samples = append(samples, speed)
+			if len(samples) > datasetStartupStableCount {
+				samples = samples[1:]
+			}
+			if stableUploadSpeed(samples) {
+				result.Stable = true
+				return result
+			}
+		} else {
+			samples = samples[:0]
+		}
+
+		select {
+		case <-ctx.Done():
+			return result
+		case <-timeout.C:
+			result.Elapsed = time.Since(started)
+			result.SpeedMbps = job.M.Speed() * 8 / 1e6
+			result.Active, result.Limit = limiter.Stats()
+			return result
+		case <-ticker.C:
+		}
+	}
+}
+
 // StartBandwidthTuner adjusts only future file admissions and future multipart
 // requests. It never cancels an in-flight object upload or changes commit order.
 type bandwidthTuneDecision struct {
