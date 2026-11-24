@@ -12,15 +12,30 @@ function openProblems() {
 
 /* ---- 目录选择（浏览服务端文件系统；Windows 空路径列盘符，可多选） ---- */
 async function openBrowse() { openModal('mb'); await browse(''); }
+let browseController = null;
+let browseRequestId = 0;
+
 async function browse(path) {
-  const r = await fetch('/api/browse?path=' + encodeURIComponent(path || '')), j = await r.json();
-  if (!r.ok) return toast(j.error);
-  S.bcur = j.path;
-  $('bp').textContent = j.path || '（我的电脑：可勾选多个盘符）';
-  $('bh').textContent = j.hint.length ? '✓ 此目录包含：' + j.hint.join(', ') : '';
-  $('bl').innerHTML = (j.parent !== null ? `<div><input type="checkbox" style="visibility:hidden"><span data-act="enter" data-p="${esc(j.parent)}">⬆ 上一级</span></div>` : '')
-    + j.dirs.map(d => `<div><input type="checkbox" data-f="${esc(d.full)}"><span data-act="enter" data-p="${esc(d.full)}" title="${esc(d.full)}">📁 ${esc(d.name)}</span></div>`).join('');
-  $('bl').scrollTop = 0;
+  browseController?.abort();
+  const controller = new AbortController();
+  const requestId = ++browseRequestId;
+  browseController = controller;
+
+  try {
+    const query = new URLSearchParams({path: path || ''});
+    const result = await requestJSON('/api/browse?' + query, {signal: controller.signal});
+    if (requestId !== browseRequestId) return;
+    S.bcur = result.path;
+    $('bp').textContent = result.path || '（我的电脑：可勾选多个盘符）';
+    $('bh').textContent = result.hint?.length ? '✓ 此目录包含：' + result.hint.join(', ') : '';
+    $('bl').innerHTML = (result.parent !== null ? `<div><input type="checkbox" style="visibility:hidden"><span data-act="enter" data-p="${esc(result.parent)}">⬆ 上一级</span></div>` : '')
+      + (result.dirs || []).map(dir => `<div><input type="checkbox" data-f="${esc(dir.full)}"><span data-act="enter" data-p="${esc(dir.full)}" title="${esc(dir.full)}">📁 ${esc(dir.name)}</span></div>`).join('');
+    $('bl').scrollTop = 0;
+  } catch (error) {
+    if (error.name !== 'AbortError' && requestId === browseRequestId) toast(error.message || '读取目录失败');
+  } finally {
+    if (requestId === browseRequestId) browseController = null;
+  }
 }
 async function addRoots() {
   const a = [...$('bl').querySelectorAll('input:checked')].map(e => e.dataset.f);
@@ -49,24 +64,55 @@ function applyNet() {
   $('cmsg').textContent = '已填入建议值，点「保存」生效'; $('cmsg').style.color = '';
 }
 ['c_wan', 'c_ds_jobs', 'c_parallel'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(S.netT); S.netT = setTimeout(refreshNet, 300); }));
+let configLoadController = null;
+
 async function reloadConfigForm() {
-  const [cr, pr] = await Promise.all([fetch('/api/config'), fetch('/api/config/profiles')]);
-  const c = await cr.json(), p = await pr.json();
-  for (const k of CFG_FIELDS) if (k !== 'sk') $('c_' + k).value = c[k] || '';
-  $('c_sk').value = ''; $('c_sk').placeholder = c.has_sk ? '已保存（留空不修改）' : '请输入';
-  $('c_profile_select').innerHTML = (p.profiles || []).map(x =>
-    `<option value="${esc(x.id)}">${esc(x.name)}${x.active ? '（当前生效）' : ''}</option>`).join('');
-  $('c_profile_select').value = p.active_profile_id || '';
-  $('cmsg').textContent = ''; $('cmsg').style.color = '';
+  configLoadController?.abort();
+  const controller = new AbortController();
+  configLoadController = controller;
   try {
-    const b = await (await fetch('/api/bandwidth')).json();
-    $('c_bandwidth_status').textContent = b.state === 'idle' ? '调优状态：空闲（上传任务开始后运行）'
-      : `调优状态：${b.state} · 当前 ${Number(b.current_mbps || 0).toFixed(1)} Mbps / 目标 ${b.target_mbps} Mbps · 文件并发 ${b.active_files}/${b.file_limit} · 分片并发 ${b.parallel} · ${b.reason || ''}`;
-  } catch (_) { $('c_bandwidth_status').textContent = '调优状态暂不可用'; }
-  return c;
+    const [config, profiles] = await Promise.all([
+      requestJSON('/api/config', {signal: controller.signal}),
+      requestJSON('/api/config/profiles', {signal: controller.signal})
+    ]);
+    if (configLoadController !== controller) return null;
+
+    for (const key of CFG_FIELDS) {
+      if (key !== 'sk') $('c_' + key).value = config[key] || '';
+    }
+    $('c_sk').value = '';
+    $('c_sk').placeholder = config.has_sk ? '已保存（留空不修改）' : '请输入';
+    $('c_profile_select').innerHTML = (profiles.profiles || []).map(profile =>
+      `<option value="${esc(profile.id)}">${esc(profile.name)}${profile.active ? '（当前生效）' : ''}</option>`
+    ).join('');
+    $('c_profile_select').value = profiles.active_profile_id || '';
+    $('cmsg').textContent = '';
+    $('cmsg').style.color = '';
+
+    try {
+      const bandwidth = await requestJSON('/api/bandwidth', {signal: controller.signal});
+      if (configLoadController !== controller) return null;
+      $('c_bandwidth_status').textContent = bandwidth.state === 'idle' ? '调优状态：空闲（上传任务开始后运行）'
+        : `调优状态：${bandwidth.state} · 当前 ${Number(bandwidth.current_mbps || 0).toFixed(1)} Mbps / 目标 ${bandwidth.target_mbps} Mbps · 文件并发 ${bandwidth.active_files}/${bandwidth.file_limit} · 分片并发 ${bandwidth.parallel} · ${bandwidth.reason || ''}`;
+    } catch (error) {
+      if (error.name === 'AbortError') return null;
+      $('c_bandwidth_status').textContent = '调优状态暂不可用';
+    }
+    return config;
+  } catch (error) {
+    if (error.name !== 'AbortError' && configLoadController === controller) toast(error.message || '读取配置失败');
+    return null;
+  } finally {
+    if (configLoadController === controller) configLoadController = null;
+  }
+}
+function closeConfigRequests() {
+  configLoadController?.abort();
+  browseController?.abort();
 }
 async function openConfig() {
-  await reloadConfigForm();
+  const config = await reloadConfigForm();
+  if (!config) return;
   openModal('mc'); refreshNet();
 }
 function configFormValues() {
@@ -112,9 +158,24 @@ async function deleteConfigProfile() {
 async function shutdown() {
   if (!confirm('退出服务？（等同于关闭 cmd 窗口）')) return;
   const post = body => fetch('/api/shutdown', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  let r = await post({});
-  if (r.status === 409) { const j = await r.json(); if (!confirm(j.error + '\n\n仍要退出吗？')) return; r = await post({force: true}); }
-  if (r.ok) { S.stopped = true; clearTimeout(S.timer); openModal('bye'); }
+  try {
+    let response = await post({});
+    if (response.status === 409) {
+      const result = await response.json().catch(() => ({}));
+      if (!confirm((result.error || '仍有任务在运行') + '\n\n仍要退出吗？')) return;
+      response = await post({force: true});
+    }
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || `退出失败：HTTP ${response.status}`);
+    }
+    S.stopped = true;
+    clearTimeout(S.timer);
+    closeConfigRequests();
+    openModal('bye');
+  } catch (error) {
+    toast(error.message || '退出服务请求失败');
+  }
 }
 
 
