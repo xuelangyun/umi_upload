@@ -6,8 +6,9 @@ const hms = s => { s = Math.round(s || 0); return [s / 3600 | 0, s / 60 % 60 | 0
 const sz = n => n >= 2 ** 30 ? (n / 2 ** 30).toFixed(2) + ' GB' : n >= 2 ** 20 ? (n / 2 ** 20).toFixed(1) + ' MB' : ((n || 0) / 1024).toFixed(0) + ' KB';
 
 const IME_COMPOSITION_GUARD_MS = 50;
-const isImeConfirmation = (event, compositionEndAt) =>
-  event.isComposing || (compositionEndAt !== null && Math.abs(event.timeStamp - compositionEndAt) < IME_COMPOSITION_GUARD_MS);
+const isImeConfirmation = (event, compositionActive, compositionEndAt) =>
+  event.isComposing || compositionActive ||
+  (compositionEndAt !== null && Math.abs(event.timeStamp - compositionEndAt) < IME_COMPOSITION_GUARD_MS);
 
 const S = {
   D: [],            // 数据集（/api/state.datasets）
