@@ -40,7 +40,6 @@ function setScanUi(sc, nRoots) {
   const running = !!sc.running;
   S.scanning = running;
   const button = $('scanBtn');
-  const scanLabel = running ? '扫描中…' : '扫描';
   if (button.dataset.scanning !== String(running)) {
     button.dataset.scanning = String(running);
     button.innerHTML = running ? '<span class="spin"></span> 扫描中…' : '扫描';
