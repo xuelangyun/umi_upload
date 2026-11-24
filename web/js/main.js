@@ -60,27 +60,24 @@ async function run(action) {
   poll();
 }
 
-/* 轮询：任务/扫描进行中由定时器每 0.6 秒调用 poll(true) 走轻量接口（只取进度，不带数据集列表）；
-   用户操作、任务/扫描刚结束、或距上次完整刷新超过 5 秒时才取完整状态（数据集很多时完整状态有几十 MB）。 */
-async function poll(tick) {
-  clearTimeout(S.timer);
+/* 完整状态通过 HTTP 首次加载/操作后刷新；运行进度、扫描进度和带宽状态由 SSE 推送。 */
+async function poll() {
   if (S.stopped) return;
-  const was = S.busy, light = tick === true && S.loaded && Date.now() - S.lastFull < 5000;
-  const s = await api('/api/state' + (light ? '?light=1' : ''));
-  if (!s.scan) return;
-  if (light) {
-    const busyNow = !!(s.job && !s.job.done);
-    if ((was && !busyNow) || (S.prevScan && !s.scan.running)) return poll();       // 刚结束：立刻取完整状态（刷新行状态/上传记录/扫描结果）
-    renderControls(s); renderBuckets(s); setScanUi(s.scan, s.roots.length); showJob(s.job);
-    S.timer = setTimeout(() => poll(true), 600); return;
-  }
+  const was = S.busy;
+  const s = await api('/api/state');
+  applyFullState(s, was);
+}
+
+function applyFullState(s, was) {
+  if (!s || !s.scan) return;
   S.loaded = true; S.lastFull = Date.now();
-  S.D = s.datasets; S.PR = s.problems; S.busy = !!(s.job && !s.job.done);
-  const have = new Set(S.D.map(r => r.id)); S.sel.forEach(id => have.has(id) || S.sel.delete(id));      // 数据集被清掉（如改桶换了格式）后，去掉失效的勾选
-  renderControls(s); renderBuckets(s); renderNotice(s.notice); renderRoots(s.roots);
-  const nw = renderProblemsButton(); setScanUi(s.scan, s.roots.length);
+  S.D = s.datasets || []; S.PR = s.problems || []; S.roots = s.roots || [];
+  S.busy = !!(s.job && !s.job.done); S.scanning = !!s.scan.running;
+  const have = new Set(S.D.map(r => r.id)); S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+  renderControls(s); renderBuckets(s); renderNotice(s.notice); renderRoots(S.roots);
+  const nw = renderProblemsButton(); setScanUi(s.scan, S.roots.length);
   $('sinfo').title = '数据库：' + s.db;
-  if (S.prevScan && !s.scan.running) {                   // 扫描刚结束：反馈结果
+  if (S.prevScan && !s.scan.running) {
     const rs = s.scan.result || {};
     toast(rs.error ? '扫描失败：' + rs.error : `扫描完成：${Number(rs.count ?? 0)} 个会话（重新统计 ${Number(rs.scanned ?? 0)} · 缓存 ${Number(rs.cached ?? 0)}），${Number(rs.problems ?? 0)} 个问题` + (nw ? `，${nw} 个有日期/房间提示` : '') + `，用时 ${s.scan.elapsed}s`);
     if (!rs.error && (S.PR.length || nw)) openProblems();
@@ -88,10 +85,66 @@ async function poll(tick) {
   S.prevScan = s.scan.running;
   if (!$('fs').options.length) setStatusOptions();
   if (S.view === 1) fillOptions();
-  if (!s.roots.length) $('pl').textContent = '先点「＋ 添加目录」（可一次勾选多个盘符），再点「扫描」';
-  showJob(s.job);
-  (S.view === 2 && was && !S.busy) ? loadRecords() : draw();    // 任务刚结束时刷新上传记录
-  if (S.busy || s.scan.running) S.timer = setTimeout(() => poll(true), 600);
+  if (!S.roots.length) $('pl').textContent = '先点「＋ 添加目录」（可一次勾选多个盘符），再点「扫描」';
+  if (s.job) {
+    S.jobID = s.job.id; S.jobLog = (s.job.log || []).slice(-250);
+    showJob({...s.job, log: S.jobLog});
+  }
+  if (s.bandwidth) renderBandwidth(s.bandwidth);
+  (S.view === 2 && was && !S.busy) ? loadRecords() : draw();
 }
 
-pollBandwidth(); prt(); poll();
+function applyLiveState(s) {
+  if (!s || !s.scan) return;
+  const busyNow = !!(s.job && !s.job.done);
+  // 任务或扫描刚结束时必须重新获取完整快照，刷新列表、记录和最终结果。
+  if ((S.busy && !busyNow) || (S.prevScan && !s.scan.running)) {
+    if (!S.liveRefresh) {
+      S.liveRefresh = true;
+      poll().catch(() => {}).finally(() => { S.liveRefresh = false; });
+    }
+    return;
+  }
+  S.busy = busyNow; S.scanning = !!s.scan.running; S.prevScan = s.scan.running;
+  setScanUi(s.scan, (S.roots || []).length);
+  if (s.job) {
+    const lines = Array.isArray(s.job.log) ? s.job.log : [];
+    if (s.job.log_reset || S.jobID !== s.job.id) S.jobLog = lines.slice(-250);
+    else if (lines.length) S.jobLog = (S.jobLog || []).concat(lines).slice(-250);
+    S.jobID = s.job.id;
+    showJob({...s.job, log: S.jobLog || []});
+  }
+  if (s.bandwidth) renderBandwidth(s.bandwidth);
+}
+
+function connectEvents() {
+  if (typeof EventSource === 'undefined') {
+    const fallback = () => { if (!S.stopped) poll().catch(() => {}).finally(() => { S.timer = setTimeout(fallback, 1200); }); };
+    fallback();
+    return;
+  }
+  const source = new EventSource('/api/events');
+  S.events = source;
+  let opened = false;
+  source.addEventListener('state', event => {
+    try { applyLiveState(JSON.parse(event.data)); } catch (_) { /* Ignore malformed event; reconnect snapshot repairs state. */ }
+  });
+  source.onopen = () => {
+    if (opened) {
+      // EventSource has reconnected. Reconcile any changes missed during the outage.
+      poll().catch(() => {});
+    }
+    opened = true;
+  };
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED && !S.sseFallbackTimer) {
+      const fallback = () => {
+        if (S.stopped || source.readyState !== EventSource.CLOSED) { S.sseFallbackTimer = null; return; }
+        poll().catch(() => {}).finally(() => { S.sseFallbackTimer = setTimeout(fallback, 2000); });
+      };
+      S.sseFallbackTimer = setTimeout(fallback, 0);
+    }
+  };
+}
+
+poll().catch(() => {}).finally(connectEvents);
