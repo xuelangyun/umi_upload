@@ -72,7 +72,7 @@ function draw() {
   document.querySelectorAll('.pager button[data-act="page"]').forEach(button => {
     button.hidden = !Number.isFinite(ps);
   });
-  $('bup').textContent = '上传选中' + (S.sel.size ? ` (${S.sel.size})` : '');
+  updateSelectionUI();
   $('xlsBtn').hidden = S.view !== 2;                     // 「导出 Excel」只在上传记录页签显示
   renderFmtSeg(); renderMoveBtns();
   S.view === 2 ? drawRecords(ps) : drawDatasets(ps);
@@ -137,7 +137,7 @@ function drawDatasets(ps) {
   const page = Number.isFinite(ps) ? S.R.slice(S.page * ps, (S.page + 1) * ps) : S.R;
   $('pgi').textContent = Number.isFinite(ps) ? `${S.page + 1} / ${pages} 页 · 共 ${S.R.length} 条` : `全部 ${S.R.length} 条`;
   const n = datasetFilteredStats();
-  $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(n.duration)}</b> · 体积 <b>${sz(n.size)}</b> <span class="muted">｜ 日期不一致 ${n.dateWarn} · 房间格式 ${n.roomBad} ·${n.umi ? ` UMI 时长&lt;3分钟 ${n.shortCal} ·` : ''}${n.isuit ? ` ISuit 错放 ${n.misplaced} ·` : ''} 设备≠SN ${n.devDiff} · 已上传 ${n.uploaded} · 已选 ${S.sel.size}</span>`;
+  $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(n.duration)}</b> · 体积 <b>${sz(n.size)}</b> <span class="muted">｜ 日期不一致 ${n.dateWarn} · 房间格式 ${n.roomBad} ·${n.umi ? ` UMI 时长&lt;3分钟 ${n.shortCal} ·` : ''}${n.isuit ? ` ISuit 错放 ${n.misplaced} ·` : ''} 设备≠SN ${n.devDiff} · 已上传 ${n.uploaded} · <span id="selectedCount">已选 ${S.sel.size}</span></span>`;
   const th = c => {
     const sorted = !!c[1] && S.sortK === c[1];
     const direction = S.sortD > 0 ? 'ascending' : 'descending';
@@ -152,11 +152,37 @@ function drawDatasets(ps) {
       : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
   const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
 }
+function updateSelectionUI() {
+  const label = '上传选中' + (S.sel.size ? ` (${S.sel.size})` : '');
+  const button = $('bup');
+  if (button.textContent !== label) button.textContent = label;
+  const count = $('selectedCount');
+  if (count) {
+    const value = '已选 ' + S.sel.size;
+    if (count.textContent !== value) count.textContent = value;
+  }
+}
+
 /* 勾选：表头复选框 = 全选当前筛选结果（含所有页） */
 function onTableChange(e) {
   const t = e.target;
-  if (t.id === 'all') { S.R.forEach(r => t.checked ? S.sel.add(r.id) : S.sel.delete(r.id)); draw(); return; }
-  if (t.dataset.id) { t.checked ? S.sel.add(t.dataset.id) : S.sel.delete(t.dataset.id); t.closest('tr').classList.toggle('sel', t.checked); $('bup').textContent = '上传选中' + (S.sel.size ? ` (${S.sel.size})` : ''); renderMoveBtns(); }
+  if (t.id === 'all') {
+    const selected = t.checked;
+    S.R.forEach(row => selected ? S.sel.add(row.id) : S.sel.delete(row.id));
+    $('tb').querySelectorAll('tbody input[data-id]').forEach(input => {
+      input.checked = selected;
+      input.closest('tr').classList.toggle('sel', selected);
+    });
+    updateSelectionUI();
+    renderMoveBtns();
+    return;
+  }
+  if (t.dataset.id) {
+    t.checked ? S.sel.add(t.dataset.id) : S.sel.delete(t.dataset.id);
+    t.closest('tr').classList.toggle('sel', t.checked);
+    updateSelectionUI();
+    renderMoveBtns();
+  }
 }
 function onTableClick(e) {                                 // 路径单元格点击复制
   const c = e.target.closest('td.cp');
