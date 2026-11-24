@@ -1395,14 +1395,17 @@ func NewHandler(webFS fs.FS) http.Handler {
 		}
 		q := r.URL.Query()
 		whereClause, args := upWhere(q)
+		allRows := q.Get("ps") == "all"
 		ps := 100
-		if v, err := strconv.Atoi(q.Get("ps")); err == nil {
-			ps = v
-		}
-		if ps < 1 {
-			ps = 1
-		} else if ps > 1000 {
-			ps = 1000
+		if !allRows {
+			if v, err := strconv.Atoi(q.Get("ps")); err == nil {
+				ps = v
+			}
+			if ps < 1 {
+				ps = 1
+			} else if ps > 1000 {
+				ps = 1000
+			}
 		}
 		pg := 0
 		if v, err := strconv.Atoi(q.Get("page")); err == nil && v > 0 {
@@ -1415,15 +1418,24 @@ func NewHandler(webFS fs.FS) http.Handler {
 			return
 		}
 
-		pageArgs := append(append([]any{}, args...), ps, pg*ps)
 		rowsOut := []map[string]any{}
-		if rows, qerr := db.Query("SELECT "+uploadSelectCols+" FROM uploads"+whereClause+" ORDER BY start_time DESC, id DESC LIMIT ? OFFSET ?", pageArgs...); qerr == nil {
+		queryRows := func(rows *sql.Rows) {
 			for rows.Next() {
 				if m := scanUploadRow(rows); m != nil {
 					rowsOut = append(rowsOut, m)
 				}
 			}
 			rows.Close()
+		}
+		if allRows {
+			if rows, qerr := db.Query("SELECT "+uploadSelectCols+" FROM uploads"+whereClause+" ORDER BY start_time DESC, id DESC", args...); qerr == nil {
+				queryRows(rows)
+			}
+		} else {
+			pageArgs := append(append([]any{}, args...), ps, pg*ps)
+			if rows, qerr := db.Query("SELECT "+uploadSelectCols+" FROM uploads"+whereClause+" ORDER BY start_time DESC, id DESC LIMIT ? OFFSET ?", pageArgs...); qerr == nil {
+				queryRows(rows)
+			}
 		}
 
 		var total int64
