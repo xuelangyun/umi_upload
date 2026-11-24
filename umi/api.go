@@ -1698,13 +1698,12 @@ func NewHandler(webFS fs.FS) http.Handler {
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("realtime") == "1" {
-			writeJSON(w, http.StatusOK, liveHTTPStateSnapshot())
-			return
-		}
-
 		if r.Method != http.MethodGet {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
+			return
+		}
+		if r.URL.Query().Get("realtime") == "1" {
+			writeJSON(w, http.StatusOK, liveHTTPStateSnapshot())
 			return
 		}
 		c := ActiveCfg()
