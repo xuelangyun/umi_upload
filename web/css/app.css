@@ -439,3 +439,10 @@ button,select,.btn{touch-action:manipulation}
 @media(max-width:640px){
   .tabs button{height:36px;min-height:36px}
 }
+
+
+/* Short desktop viewports: allow the dashboard and log panel to scroll vertically. */
+@media(max-height:720px) and (min-width:901px){
+  body{height:auto;min-height:100dvh;overflow-x:hidden;overflow-y:auto}
+  .table-wrap{flex:1 0 320px;min-height:320px}
+}
