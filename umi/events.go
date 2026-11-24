@@ -15,6 +15,7 @@ const (
 	sseClientBuffer      = 8
 	sseWriteTimeout      = 10 * time.Second
 	sseLogLimit          = 250
+	sseLogHistoryLimit   = 1500
 )
 
 type sseSubscriber struct {
@@ -75,24 +76,49 @@ func liveStateSnapshot() (map[string]any, string, []string) {
 	}, jobID, logs
 }
 
-// sseLogDelta returns new log lines when the previous log slice is still a
-// prefix. If a job changes or the server log rolls over, the client replaces
-// its local tail instead of receiving an incomplete sequence.
+// logOverlap finds the longest prefix of current that is also a suffix of
+// previous. This keeps incremental delivery working when Job.Log reaches its
+// fixed history limit and drops its oldest entries on each append.
+func logOverlap(previous, current []string) int {
+	if len(previous) == 0 || len(current) == 0 {
+		return 0
+	}
+
+	// Build the KMP failure table for current, then scan previous once.
+	// The work is linear in the bounded server-side log history.
+	failure := make([]int, len(current))
+	for i, matched := 1, 0; i < len(current); i++ {
+		for matched > 0 && current[i] != current[matched] {
+			matched = failure[matched-1]
+		}
+		if current[i] == current[matched] {
+			matched++
+		}
+		failure[i] = matched
+	}
+
+	matched := 0
+	for _, line := range previous {
+		for matched > 0 && (matched == len(current) || line != current[matched]) {
+			matched = failure[matched-1]
+		}
+		if matched < len(current) && line == current[matched] {
+			matched++
+		}
+	}
+	return matched
+}
+
+// sseLogDelta returns only lines not already represented by the subscriber.
+// A job change or a log replacement without an overlapping sequence resets
+// the client tail; normal appends and bounded-history rollovers stay incremental.
 func sseLogDelta(previousJobID string, previous []string, currentJobID string, current []string) ([]string, bool) {
 	if previousJobID != currentJobID {
 		return tailLog(current), true
 	}
-	if len(current) >= len(previous) {
-		prefix := true
-		for i := range previous {
-			if previous[i] != current[i] {
-				prefix = false
-				break
-			}
-		}
-		if prefix {
-			return append([]string(nil), current[len(previous):]...), false
-		}
+	overlap := logOverlap(previous, current)
+	if overlap > 0 || len(previous) == 0 {
+		return append([]string(nil), current[overlap:]...), false
 	}
 	return tailLog(current), true
 }

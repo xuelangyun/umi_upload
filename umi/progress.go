@@ -156,8 +156,8 @@ func JobLog(j *Job, tag string, text string) {
 	line := fmt.Sprintf("[%s] %s%s", ts, prefix, text)
 	PL.Lock()
 	j.Log = append(j.Log, line)
-	if len(j.Log) > 1500 {
-		j.Log = append([]string(nil), j.Log[len(j.Log)-1500:]...)
+	if len(j.Log) > sseLogHistoryLimit {
+		j.Log = append([]string(nil), j.Log[len(j.Log)-sseLogHistoryLimit:]...)
 	}
 	PL.Unlock()
 }
