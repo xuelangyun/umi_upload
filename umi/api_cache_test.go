@@ -33,7 +33,7 @@ func TestETagMatches(t *testing.T) {
 
 func TestDatasetRowsConfigKeyTracksBucketsOnly(t *testing.T) {
 	base := map[string]string{"bucket": "upload-a", "bucket_umi": "upload-b", "endpoint": "https://oss.example"}
-	if got, want := datasetRowsConfigKey(base), "upload-a\x00upload-b"; got != want {
+	if got, want := datasetRowsConfigKey(base), DBPath+"\x00upload-a\x00upload-b"; got != want {
 		t.Fatalf("config key = %q, want %q", got, want)
 	}
 
