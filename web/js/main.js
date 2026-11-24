@@ -134,6 +134,9 @@ function refreshDatasetSnapshot(targetVersion) {
         if (snapshot.contentChanged && S.loaded && !S.pollPromise) {
           const have = new Set(S.D.map(row => row.id));
           S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+          // Dataset snapshots can change independently of a full-state poll.
+          // Keep the device/date/operator query facets in sync with the new rows.
+          if (S.view === 1) fillOptions();
           draw();
         }
       } catch (_) {

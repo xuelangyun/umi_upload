@@ -1,5 +1,25 @@
 /* 过滤条：「暂存—查询」模式。控件里改的是暂存值，点「查询」/回车才写入 S.F 并生效；切换页签沿用已生效条件。
    数据列表在前端过滤（rows），上传记录在后端 SQL 过滤（loadRecords → /api/uploads）。两边字段含义相同。 */
+/* Shared dataset overview for filters, warning badges, and format controls. */
+function datasetOverview() {
+  const key = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
+  if (S.datasetOverviewCache?.key === key) return S.datasetOverviewCache;
+
+  const stats = {total: S.D.length, isuit: 0, umi_v3: 0, warn: 0, misplaced: 0};
+  const byId = new Map();
+  for (const row of S.D) {
+    byId.set(row.id, row);
+    if (isUmi(row)) stats.umi_v3++;
+    else stats.isuit++;
+    if (movable(row)) stats.misplaced++;
+    if (hasWarn(row)) stats.warn++;
+  }
+
+  const overview = {key, stats, byId};
+  S.datasetOverviewCache = overview;
+  return overview;
+}
+
 const STATUS_OPTIONS = {
   1: [['', '全部状态'], ['未上传', '未上传'], ['已上传', '已上传'], ['上传失败', '上传失败'], ['远端缺失', '远端缺失'], ['mis', '仅错放'], ['warn', '有提示（日期/房间/设备）']],
   2: [['', '全部状态'], ['ok', '已上传(成功+已存在)'], ['成功', '成功'], ['已存在', '已存在'], ['失败', '失败']],
