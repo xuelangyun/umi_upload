@@ -62,20 +62,38 @@ async function run(action) {
 
 /* 完整状态通过 HTTP 首次加载/操作后刷新；运行进度、扫描进度和带宽状态由 SSE 推送。 */
 async function fetchDatasetSnapshot() {
-  const headers = {};
-  if (S.datasetETag) headers['If-None-Match'] = S.datasetETag;
-  const response = await fetch('/api/datasets', {headers, cache: 'no-store'});
-  if (response.status !== 304 && !response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
+  if (S.datasetFetchPromise) return S.datasetFetchPromise;
+  const request = (async () => {
+    const previousETag = S.datasetETag;
+    const headers = {};
+    if (previousETag) headers['If-None-Match'] = previousETag;
+    const response = await fetch('/api/datasets', {headers, cache: 'no-store'});
+    if (response.status !== 304 && !response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
+    }
+    const version = response.headers.get('X-Dataset-Version');
+    if (version !== null) {
+      const parsed = Number(version);
+      if (Number.isFinite(parsed)) S.datasetVersion = parsed;
+    }
+    if (response.status === 304) {
+      S.datasetETag = response.headers.get('ETag') || previousETag;
+      return {rows: S.D, contentChanged: false};
+    }
+    const rows = await response.json();
+    const nextETag = response.headers.get('ETag') || '';
+    const contentChanged = !previousETag || !nextETag || nextETag !== previousETag;
+    S.D = Array.isArray(rows) ? rows : [];
+    S.datasetETag = nextETag || previousETag || '';
+    return {rows: S.D, contentChanged};
+  })();
+  S.datasetFetchPromise = request;
+  try {
+    return await request;
+  } finally {
+    if (S.datasetFetchPromise === request) S.datasetFetchPromise = null;
   }
-  const version = response.headers.get('X-Dataset-Version');
-  if (version !== null) S.datasetVersion = Number(version) || S.datasetVersion || 0;
-  S.datasetETag = response.headers.get('ETag') || S.datasetETag || '';
-  if (response.status === 304) return S.D;
-  const rows = await response.json();
-  S.D = Array.isArray(rows) ? rows : [];
-  return S.D;
 }
 
 function scheduleDatasetSnapshotRetry() {
@@ -103,18 +121,19 @@ function refreshDatasetSnapshot(targetVersion) {
   const request = (async () => {
     do {
       try {
-        await fetchDatasetSnapshot();
+        const snapshot = await fetchDatasetSnapshot();
         S.datasetRetryDelay = 1000;
+        if (snapshot.contentChanged && S.loaded && !S.pollPromise) {
+          const have = new Set(S.D.map(row => row.id));
+          S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+          draw();
+        }
       } catch (_) {
         // Retry independently of future SSE events; the old list stays visible.
         fetchFailed = true;
         return;
       }
-      if (S.loaded) {
-        const have = new Set(S.D.map(row => row.id));
-        S.sel.forEach(id => have.has(id) || S.sel.delete(id));
-        draw();
-      }
+
     } while (!S.stopped && S.datasetVersion < S.datasetRefreshTarget);
   })();
   S.datasetRefreshPromise = request;
@@ -138,12 +157,12 @@ async function poll() {
     do {
       S.pollAgain = false;
       const was = S.busy;
-      const [s, datasets] = await Promise.all([
+      const [s, datasetSnapshot] = await Promise.all([
         api('/api/state?light=1'),
         fetchDatasetSnapshot()
       ]);
       if (s && s.scan) {
-        s.datasets = datasets;
+        s.datasets = datasetSnapshot.rows;
         applyFullState(s, was);
       }
     } while (S.pollAgain && !S.stopped);
