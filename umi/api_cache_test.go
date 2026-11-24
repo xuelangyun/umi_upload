@@ -89,11 +89,17 @@ func TestDatasetEndpointUsesETag(t *testing.T) {
 	etag := first.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("dataset response did not include an ETag")
+	}	firstVersion := first.Header().Get("X-Dataset-Version")
+	if firstVersion == "" {
+		t.Fatal("dataset response did not include X-Dataset-Version")
 	}
 	if got := first.Body.String(); got != "[]" {
 		t.Fatalf("empty dataset response = %q, want []", got)
 	}
 
+	// Invalidate without changing the response body: the ETag remains the same,
+	// but clients must receive the newer logical data version.
+	invalidateDatasetRowsCache()
 	req := httptest.NewRequest(http.MethodGet, "/api/datasets", nil)
 	req.Header.Set("If-None-Match", etag)
 	second := httptest.NewRecorder()
@@ -103,5 +109,7 @@ func TestDatasetEndpointUsesETag(t *testing.T) {
 	}
 	if second.Body.Len() != 0 {
 		t.Fatalf("304 response unexpectedly has body %q", second.Body.String())
+	}	if second.Header().Get("X-Dataset-Version") == "" || second.Header().Get("X-Dataset-Version") == firstVersion {
+		t.Fatalf("304 response did not report updated data version: first=%q second=%q", firstVersion, second.Header().Get("X-Dataset-Version"))
 	}
 }
