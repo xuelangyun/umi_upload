@@ -71,6 +71,7 @@ func liveStateSnapshot() (map[string]any, string, []string) {
 		"scan":      scan,
 		"job":       jobValue,
 		"bandwidth": CurrentBandwidthTuneStatus(),
+		"dataset_version": datasetRowsVersion(),
 	}, jobID, logs
 }
 
@@ -108,6 +109,7 @@ func encodeSSEState(state map[string]any, delta []string, reset bool) ([]byte, e
 		"scan":      state["scan"],
 		"job":       state["job"],
 		"bandwidth": state["bandwidth"],
+		"dataset_version": state["dataset_version"],
 	}
 	if job, ok := state["job"].(map[string]any); ok {
 		jobWithLog := make(map[string]any, len(job)+2)
@@ -258,7 +260,7 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("X-Accel-Buffering", "no")
-	if writeSSEFrame(w, flusher, []byte("retry: 2000\\n\\n")) != nil {
+	if writeSSEFrame(w, flusher, []byte("retry: 2000\n\n")) != nil {
 		return
 	}
 
@@ -287,7 +289,7 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-heartbeat.C:
-			if writeSSEFrame(w, flusher, []byte(": keep-alive\\n\\n")) != nil {
+			if writeSSEFrame(w, flusher, []byte(": keep-alive\n\n")) != nil {
 				return
 			}
 		}
