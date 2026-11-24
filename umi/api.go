@@ -2,6 +2,7 @@ package umi
 
 import (
 	"bytes"
+	"database/sql"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
