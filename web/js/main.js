@@ -13,8 +13,8 @@ const ACT = {
     const key = el.dataset.k;
     S.sortK = key; S.sortD *= -1; draw();
     if (event.detail === 0) {
-      [...$('tb').querySelectorAll('th[data-act="sort"]')]
-        .find(header => header.dataset.k === key)?.focus({preventScroll: true});
+      [...$('tb').querySelectorAll('button.th-sort')]
+        .find(button => button.dataset.k === key)?.focus({preventScroll: true});
     }
   },
   toggleLog: el => { const f = $('logbox').classList.toggle('fold'); el.textContent = f ? '展开 ▴' : '折叠 ▾'; },
@@ -43,13 +43,6 @@ $('flt').addEventListener('keydown', e => {
 $('tb').addEventListener('change', onTableChange);
 $('mbody').addEventListener('change', e => { if (e.target.id === 'mvall') $('mbody').querySelectorAll('input[data-mv]:not(:disabled)').forEach(c => c.checked = e.target.checked); });
 $('tb').addEventListener('click', onTableClick);
-$('tb').addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const header = e.target.closest('th[data-act="sort"]');
-  if (!header) return;
-  e.preventDefault();
-  header.click();
-});
 $('onlye').addEventListener('change', () => S.lastLog = '');
 document.querySelectorAll('[data-input=prt]').forEach(e => e.addEventListener('input', prt));
 
