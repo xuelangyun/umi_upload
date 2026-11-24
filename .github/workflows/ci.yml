@@ -20,6 +20,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Check frontend JavaScript syntax
+        run: node --check web/js/util.js && node --check web/js/main.js
+
       - name: Run tests
         run: go test ./...
 
