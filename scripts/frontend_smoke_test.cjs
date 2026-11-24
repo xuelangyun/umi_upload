@@ -24,6 +24,24 @@ test("classic frontend scripts expose a working datasetOverview helper", () => {
   assert.equal(vm.runInContext("typeof datasetOverview", context), "function");
   assert.equal(vm.runInContext("typeof renderProblemsButton", context), "function");
   assert.equal(vm.runInContext("typeof renderFmtSeg", context), "function");
+  const imeChecks = JSON.parse(vm.runInContext(
+    `JSON.stringify({
+      nativeComposition: isImeConfirmation({isComposing: true, timeStamp: 100}, null),
+      eventBeforeCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 980}, 1000),
+      eventJustAfterCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 1030}, 1000),
+      eventOutsideGuardWindow: isImeConfirmation({isComposing: false, timeStamp: 1051}, 1000),
+      ordinaryEnter: isImeConfirmation({isComposing: false, timeStamp: 1051}, null),
+    })`,
+    context,
+  ));
+  assert.deepEqual(imeChecks, {
+    nativeComposition: true,
+    eventBeforeCompositionEnd: true,
+    eventJustAfterCompositionEnd: true,
+    eventOutsideGuardWindow: false,
+    ordinaryEnter: false,
+  });
+
 
   const rows = [
     {id: "1", fmt: "isuit", type: "normal", misplaced: "误放", date_warn: "日期不一致"},
