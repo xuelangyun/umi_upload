@@ -95,8 +95,8 @@ async function browse(path) {
     S.bcur = result.path;
     $('bp').textContent = result.path || '（我的电脑：可勾选多个盘符）';
     $('bh').textContent = result.hint?.length ? '✓ 此目录包含：' + result.hint.join(', ') : '';
-    $('bl').innerHTML = (result.parent !== null ? `<div><input type="checkbox" style="visibility:hidden"><span data-act="enter" data-p="${esc(result.parent)}">⬆ 上一级</span></div>` : '')
-      + (result.dirs || []).map(dir => `<div><input type="checkbox" data-f="${esc(dir.full)}"><span data-act="enter" data-p="${esc(dir.full)}" title="${esc(dir.full)}">📁 ${esc(dir.name)}</span></div>`).join('');
+    $('bl').innerHTML = (result.parent !== null ? `<div><span class="dir-check-spacer" aria-hidden="true"></span><button type="button" class="dir-enter" data-act="enter" data-p="${esc(result.parent)}" aria-label="进入上一级目录">⬆ 上一级</button></div>` : '')
+      + (result.dirs || []).map(dir => `<div><input type="checkbox" data-f="${esc(dir.full)}"><button type="button" class="dir-enter" data-act="enter" data-p="${esc(dir.full)}" aria-label="进入目录 ${esc(dir.name)}" title="${esc(dir.full)}">📁 ${esc(dir.name)}</button></div>`).join('');
     $('bl').scrollTop = 0;
   } catch (error) {
     if (error.name !== 'AbortError' && requestId === browseRequestId) toast(error.message || '读取目录失败');
