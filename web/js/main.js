@@ -205,7 +205,7 @@ function applyFullState(s, was) {
   S.loaded = true; S.lastFull = Date.now();
   S.D = s.datasets || []; S.PR = s.problems || []; S.roots = s.roots || [];
   S.busy = !!(s.job && !s.job.done); S.scanning = !!s.scan.running;
-  const have = new Set(S.D.map(r => r.id)); pruneSelection(have);
+  if (S.sel.size) pruneSelection(datasetOverview().byId);
   renderControls(s); renderBuckets(s); renderNotice(s.notice); renderRoots(S.roots);
   const nw = renderProblemsButton(); setScanUi(s.scan, S.roots.length);
   $('sinfo').title = '数据库：' + s.db;
