@@ -232,10 +232,13 @@ func (h *sseHub) run(ctx context.Context) {
 	}
 }
 
-func writeSSEFrame(w http.ResponseWriter, data []byte) error {
+func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, data []byte) error {
 	controller := http.NewResponseController(w)
 	_ = controller.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
 	_, err := w.Write(data)
+	if err == nil {
+		flusher.Flush()
+	}
 	_ = controller.SetWriteDeadline(time.Time{})
 	return err
 }
@@ -256,10 +259,9 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("X-Accel-Buffering", "no")
-	if _, err := io.WriteString(w, "retry: 2000\n\n"); err != nil {
+	if writeSSEFrame(w, flusher, []byte("retry: 2000\\n\\n")) != nil {
 		return
 	}
-	flusher.Flush()
 
 	events, unsubscribe, err := dashboardSSE.subscribe()
 	if err != nil {
@@ -272,27 +274,23 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 
 	// Deliver the initial full live snapshot even when the request context is
 	// already closing; this also makes initialization deterministic in tests.
-	initial, ok := <-events
-	if !ok || writeSSEFrame(w, initial) != nil {
+	initial, open := <-events
+	if !open || writeSSEFrame(w, flusher, initial) != nil {
 		return
 	}
-	flusher.Flush()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case frame, open := <-events:
-			if !open || writeSSEFrame(w, frame) != nil {
+			if !open || writeSSEFrame(w, flusher, frame) != nil {
 				return
 			}
-			flusher.Flush()
 		case <-heartbeat.C:
-			if writeSSEFrame(w, []byte(": keep-alive\n\n")) != nil {
+			if writeSSEFrame(w, flusher, []byte(": keep-alive\\n\\n")) != nil {
 				return
 			}
-			flusher.Flush()
 		}
 	}
 }
-
