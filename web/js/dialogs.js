@@ -169,8 +169,7 @@ async function shutdown() {
       const result = await response.json().catch(() => ({}));
       throw new Error(result.error || `退出失败：HTTP ${response.status}`);
     }
-    S.stopped = true;
-    clearTimeout(S.timer);
+    stopLiveUpdates();
     closeConfigRequests();
     openModal('bye');
   } catch (error) {
