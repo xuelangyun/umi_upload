@@ -89,7 +89,8 @@ func TestDatasetEndpointUsesETag(t *testing.T) {
 	etag := first.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("dataset response did not include an ETag")
-	}	firstVersion := first.Header().Get("X-Dataset-Version")
+	}
+	firstVersion := first.Header().Get("X-Dataset-Version")
 	if firstVersion == "" {
 		t.Fatal("dataset response did not include X-Dataset-Version")
 	}
@@ -109,7 +110,8 @@ func TestDatasetEndpointUsesETag(t *testing.T) {
 	}
 	if second.Body.Len() != 0 {
 		t.Fatalf("304 response unexpectedly has body %q", second.Body.String())
-	}	if second.Header().Get("X-Dataset-Version") == "" || second.Header().Get("X-Dataset-Version") == firstVersion {
+	}
+	if second.Header().Get("X-Dataset-Version") == "" || second.Header().Get("X-Dataset-Version") == firstVersion {
 		t.Fatalf("304 response did not report updated data version: first=%q second=%q", firstVersion, second.Header().Get("X-Dataset-Version"))
 	}
 }
