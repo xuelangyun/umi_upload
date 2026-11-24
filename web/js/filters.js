@@ -62,7 +62,7 @@ function datasetOverview() {
 }
 
 function rows() {
-  const f = S.F, lc = s => (s || '').toLowerCase(), T = lc(f.task), L = lc(f.location), Q = lc(f.q).replace(/\\/g, '/').split(/\\s+/).filter(Boolean);
+  const f = S.F, lc = s => (s || '').toLowerCase(), T = lc(f.task), L = lc(f.location), Q = lc(f.q).replace(/\\/g, '/').split(/\s+/).filter(Boolean);
   const snapshotKey = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
   const key = JSON.stringify([snapshotKey, f.fmt || '', f.type || '', f.device || '', f.cap_date || '', f.operator || '', T, L, f.status || '', Q, S.sortK, S.sortD]);
   if (S.datasetViewCache?.key === key) {
