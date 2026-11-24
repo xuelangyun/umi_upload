@@ -61,6 +61,21 @@ async function run(action) {
 }
 
 /* 完整状态通过 HTTP 首次加载/操作后刷新；运行进度、扫描进度和带宽状态由 SSE 推送。 */
+async function fetchDatasetSnapshot() {
+  const headers = {};
+  if (S.datasetETag) headers['If-None-Match'] = S.datasetETag;
+  const response = await fetch('/api/datasets', {headers, cache: 'no-store'});
+  if (response.status === 304) return S.D;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
+  }
+  const rows = await response.json();
+  S.D = Array.isArray(rows) ? rows : [];
+  S.datasetETag = response.headers.get('ETag') || '';
+  return S.D;
+}
+
 async function poll() {
   if (S.stopped) return;
   if (S.pollPromise) {
@@ -71,8 +86,14 @@ async function poll() {
     do {
       S.pollAgain = false;
       const was = S.busy;
-      const s = await api('/api/state');
-      applyFullState(s, was);
+      const [s, datasets] = await Promise.all([
+        api('/api/state?light=1'),
+        fetchDatasetSnapshot()
+      ]);
+      if (s && s.scan) {
+        s.datasets = datasets;
+        applyFullState(s, was);
+      }
     } while (S.pollAgain && !S.stopped);
   })();
   S.pollPromise = request;
@@ -134,9 +155,8 @@ function applyLiveState(s) {
 
 async function pollFallback() {
   try {
-    await poll();
-    const r = await fetch('/api/bandwidth', {cache: 'no-store'});
-    if (r.ok) renderBandwidth(await r.json());
+    const state = await api('/api/state?realtime=1');
+    applyLiveState(state);
   } catch (_) {
     // Keep the last visible state; the next fallback cycle retries.
   }

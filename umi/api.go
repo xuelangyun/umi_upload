@@ -2,6 +2,7 @@ package umi
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -171,8 +172,80 @@ func infoOf(r *DatasetRecord) RowWarnings {
 	return inf
 }
 
+type datasetRowsCacheState struct {
+	mu           sync.Mutex
+	version      uint64
+	builtVersion uint64
+	configKey    string
+	rows         []map[string]any
+	body         []byte
+	etag         string
+}
+
+var datasetRowsCache = datasetRowsCacheState{version: 1}
+
+// invalidateDatasetRowsCache marks the materialized dataset list stale after
+// scans, uploads, checks, or moves. Bucket changes are detected by configKey.
+func invalidateDatasetRowsCache() {
+	datasetRowsCache.mu.Lock()
+	datasetRowsCache.version++
+	datasetRowsCache.rows = nil
+	datasetRowsCache.body = nil
+	datasetRowsCache.etag = ""
+	datasetRowsCache.mu.Unlock()
+}
+
+func datasetRowsConfigKey(cfg map[string]string) string {
+	return DBPath + "\x00" + BucketFor("isuit", cfg) + "\x00" + BucketFor("umi_v3", cfg)
+}
+
+// cachedDatasetRows serializes SQLite summaries, warning calculations, sorting,
+// and JSON encoding once per data version. Callers treat rows/body as immutable.
+func cachedDatasetRows(cfg map[string]string) ([]map[string]any, []byte, string, error) {
+	key := datasetRowsConfigKey(cfg)
+	datasetRowsCache.mu.Lock()
+	defer datasetRowsCache.mu.Unlock()
+
+	if datasetRowsCache.rows != nil &&
+		datasetRowsCache.builtVersion == datasetRowsCache.version &&
+		datasetRowsCache.configKey == key {
+		return datasetRowsCache.rows, datasetRowsCache.body, datasetRowsCache.etag, nil
+	}
+
+	rows := buildDatasetRows(cfg)
+	body, err := jsonMarshalNoEscape(rows, "")
+	if err != nil {
+		return nil, nil, "", err
+	}
+	sum := sha256.Sum256(body)
+	etag := fmt.Sprintf("\"%x\"", sum[:])
+
+	datasetRowsCache.rows = rows
+	datasetRowsCache.body = body
+	datasetRowsCache.etag = etag
+	datasetRowsCache.configKey = key
+	datasetRowsCache.builtVersion = datasetRowsCache.version
+	return rows, body, etag, nil
+}
+
 func DatasetRows() []map[string]any {
-	cfg := ActiveCfg()
+	rows, _, _, err := cachedDatasetRows(ActiveCfg())
+	if err != nil {
+		return []map[string]any{}
+	}
+	return rows
+}
+
+func etagMatches(header, etag string) bool {
+	for _, candidate := range strings.Split(header, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || candidate == etag || strings.TrimPrefix(candidate, "W/") == etag {
+			return true
+		}
+	}
+	return false
+}
+func buildDatasetRows(cfg map[string]string) []map[string]any {
 	db, _ := OpenDB()
 
 	type upSummary struct {
@@ -1629,7 +1702,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 			return
 		}
-		c := GetCfg()
+		if r.URL.Query().Get("realtime") == "1" {
+			writeJSON(w, http.StatusOK, liveHTTPStateSnapshot())
+			return
+		}
+		c := ActiveCfg()
 		PL.Lock()
 		var curJ *Job
 		for _, j := range Jobs {
@@ -1681,6 +1758,28 @@ func NewHandler(webFS fs.FS) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, out)
 	})
+
+	mux.HandleFunc("/api/datasets", func(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
+		return
+	}
+	_, body, etag, err := cachedDatasetRows(ActiveCfg())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "生成数据集快照失败: " + err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", etag)
+	if etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+})
 
 	mux.HandleFunc("/api/events", serveEvents)
 

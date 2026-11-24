@@ -46,6 +46,9 @@ func AddUpload(rec *DatasetRecord, ds *DatasetMeta, c map[string]string, status 
 		rec.Start, rec.End, rec.Slices, rec.Size, rec.Duration, nf,
 		status, method, rev, int64(math.Round(elapsed)), speed, errMsg, NowTS(),
 	)
+	if err == nil {
+		invalidateDatasetRowsCache()
+	}
 	return err
 }
 

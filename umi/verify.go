@@ -185,5 +185,8 @@ func SaveCheck(rel string, r *CheckResult) error {
 		"INSERT OR REPLACE INTO checks(rel,status,ready,deep,detail,checked_at) VALUES(?,?,?,?,?,?)",
 		rel, r.Status, readyInt, deepInt, string(b), r.CheckedAt,
 	)
+	if err == nil {
+		invalidateDatasetRowsCache()
+	}
 	return err
 }
