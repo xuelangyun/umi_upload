@@ -49,7 +49,7 @@ select.narrow,.narrow{width:62px}.w58{width:54px}
 .src{display:flex;flex-direction:column;gap:8px}.src .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .chips{display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start;overflow-y:auto;min-height:26px;max-height:56px;flex:1}
 .chip{display:inline-flex;align-items:center;gap:2px;height:24px;border:1px solid var(--ln);border-radius:12px;padding:0 3px 0 10px;background:var(--s2);white-space:nowrap;font-size:12px}
-.chip i{cursor:pointer;color:var(--mu);font-style:normal;padding:0 6px;border-radius:10px}.chip i:hover{color:var(--bad);background:var(--bads)}
+.chip .root-remove{display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;min-height:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--mu);font:inherit;cursor:pointer}.chip .root-remove:hover{color:var(--bad);background:var(--bads)}
 .pp{border-left:3px solid var(--ac);display:flex;flex-direction:column;gap:8px}
 /* Progress title/percentage and each metric use the same two-row grid:
    labels share a baseline, values share a bottom baseline, including the idle state. */
@@ -108,7 +108,9 @@ td.room{cursor:pointer;font:12px var(--mono)}td.room:hover{text-decoration:under
 .dlg-f{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .dirlist{border:1px solid var(--ln);border-radius:var(--r);height:280px;overflow:auto;margin:8px 0}
 .dirlist div{display:flex;gap:9px;align-items:center;padding:5px 11px;border-bottom:1px solid var(--ln)}.dirlist input{width:15px;height:15px;padding:0;margin:0;flex:none}
-.dirlist span{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dirlist span:hover{color:var(--ac)}
+.dirlist .dir-check-spacer{width:15px;flex:none}
+.dirlist button.dir-enter{flex:1;min-width:0;width:100%;height:auto;min-height:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.dirlist button.dir-enter:hover{color:var(--ac)}
 .pbody{max-height:60vh;overflow:auto;margin:8px 0;font-size:12px}.pbody div{padding:4px 0;border-bottom:1px solid var(--ln);word-break:break-all}
 
 /* UMI_v3 视频预览（点会话名弹出） */
