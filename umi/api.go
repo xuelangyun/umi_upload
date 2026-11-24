@@ -1682,6 +1682,8 @@ func NewHandler(webFS fs.FS) http.Handler {
 		writeJSON(w, http.StatusOK, out)
 	})
 
+	mux.HandleFunc("/api/events", serveEvents)
+
 	mux.HandleFunc("/api/notice/ack", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})

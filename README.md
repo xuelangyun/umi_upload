@@ -15,6 +15,10 @@
    umi_upload.exe --port 8765 --host 127.0.0.1 --db umi_web.db --no-browser
    ```
 
+### 实时状态推送
+
+页面首次加载和用户操作后仍通过 HTTP 获取完整状态；上传进度、扫描进度、任务日志增量及动态带宽状态通过 `GET /api/events` SSE 长连接推送。服务端按 500ms 合并状态变化、每 15 秒发送心跳；浏览器断线自动重连，重连后重新获取完整状态补齐期间遗漏的数据。SSE 不替代配置、任务控制和数据查询等 HTTP API。
+
 ### Windows EXE 图标
 
 图标源文件位于 `winres/umi_upload_icon.png`，资源定义位于 `winres/winres.json`。执行 `go run scripts/package_release.go -out dist` 时，打包脚本会先调用固定版本的 `go-winres v0.3.3` 生成 Windows amd64 资源对象，再编译 EXE 并自动清理临时资源文件。

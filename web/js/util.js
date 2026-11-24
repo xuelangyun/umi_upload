@@ -18,7 +18,8 @@ const S = {
   PR: [],           // 扫描问题
   lastLog: '', sig: {}, bcur: '', stopped: false, timer: null,
   buckets: {}, formats: {},   // 两种数据格式各自的桶 {isuit: 'hw-upload', umi_v3: 'prt-huawei'} / 格式名（/api/state）；会话格式由目录名决定，每行 r.fmt
-  loaded: false, lastFull: 0,   // 是否取过完整状态 / 上次取完整状态的时间（轮询分级用，见 main.js poll）
+  loaded: false, lastFull: 0,   // 最近一次完整状态快照
+  roots: [], jobID: '', jobLog: [], events: null, liveRefresh: false, sseFallbackTimer: null,
 };
 
 /* 状态文字 → 样式类（tag 颜色） */
