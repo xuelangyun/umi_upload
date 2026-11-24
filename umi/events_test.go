@@ -25,7 +25,8 @@ func TestSSELogDelta(t *testing.T) {
 		{name: "append", prevID: "job-1", prev: []string{"one", "two"}, currentID: "job-1", current: []string{"one", "two", "three"}, want: []string{"three"}},
 		{name: "unchanged", prevID: "job-1", prev: []string{"one"}, currentID: "job-1", current: []string{"one"}, want: nil},
 		{name: "new job", prevID: "job-1", prev: []string{"one"}, currentID: "job-2", current: []string{"fresh"}, want: []string{"fresh"}, wantReset: true},
-		{name: "log rollover", prevID: "job-1", prev: []string{"old-1", "old-2", "old-3"}, currentID: "job-1", current: []string{"old-2", "old-3", "new"}, want: []string{"old-2", "old-3", "new"}, wantReset: true},
+		{name: "log rollover with overlap", prevID: "job-1", prev: []string{"old-1", "old-2", "old-3"}, currentID: "job-1", current: []string{"old-2", "old-3", "new"}, want: []string{"new"}},
+		{name: "replaced log without overlap", prevID: "job-1", prev: []string{"old-1", "old-2"}, currentID: "job-1", current: []string{"new-1", "new-2"}, want: []string{"new-1", "new-2"}, wantReset: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,6 +54,22 @@ func TestSSELogDeltaBeyondDisplayTailRemainsIncremental(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, []string{"new-line"}) {
 		t.Fatalf("delta = %#v, want only the appended line", got)
+	}
+}
+
+func TestSSELogDeltaAtServerHistoryRolloverRemainsIncremental(t *testing.T) {
+	previous := make([]string, sseLogHistoryLimit)
+	for i := range previous {
+		previous[i] = fmt.Sprintf("line-%04d", i)
+	}
+	current := append(append([]string(nil), previous[1:]...), "new-line")
+
+	got, reset := sseLogDelta("job-1", previous, "job-1", current)
+	if reset {
+		t.Fatal("server history rollover must not reset the client log tail")
+	}
+	if !reflect.DeepEqual(got, []string{"new-line"}) {
+		t.Fatalf("delta = %#v, want only the newly appended line", got)
 	}
 }
 
