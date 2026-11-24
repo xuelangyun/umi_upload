@@ -109,7 +109,7 @@ function drawRecords(ps) {
 }
 
 function datasetFilteredStats() {
-  const key = S.datasetViewCache?.key || '';
+  const key = S.datasetViewCache?.filterKey || '';
   if (S.datasetFilteredStatsCache?.key === key) return S.datasetFilteredStatsCache.value;
   const value = {duration: 0, size: 0, dateWarn: 0, roomBad: 0, umi: 0, shortCal: 0, isuit: 0, misplaced: 0, devDiff: 0, uploaded: 0};
   for (const r of S.R) {
