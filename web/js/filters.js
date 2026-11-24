@@ -24,7 +24,7 @@ function datasetOverview() {
   const facets = {}, facetKeys = {};
   for (const key of Object.keys(optionSets)) {
     facets[key] = [...optionSets[key]].sort();
-    facetKeys[key] = facets[key].join('\\u0001');
+    facetKeys[key] = facets[key].join(String.fromCharCode(1));
   }
   const overview = {key, data: S.D, stats, byId, facets, facetKeys};
   S.datasetOverviewCache = overview;
@@ -53,7 +53,7 @@ function refresh() { S.view === 1 ? draw() : loadRecords(); }          // 重新
 /* 下拉选项只在内容变化时重建（避免轮询时闪烁、打断用户正在打开的下拉） */
 function setOptions(id, vals, allLabel, preparedKey) {
   const u = preparedKey === undefined ? [...new Set(vals)].filter(Boolean).sort() : vals;
-  const key = S.view + (preparedKey === undefined ? u.join('\\u0001') : preparedKey);
+  const key = S.view + (preparedKey === undefined ? u.join(String.fromCharCode(1)) : preparedKey);
   if (S.sig[id] === key) return;
   S.sig[id] = key;
   const sel = $(id), v = sel.value;
