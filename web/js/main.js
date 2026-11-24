@@ -84,12 +84,14 @@ function refreshDatasetSnapshot(targetVersion) {
   S.datasetRefreshTarget = Math.max(S.datasetRefreshTarget || 0, target);
   if (S.datasetRefreshPromise) return S.datasetRefreshPromise;
 
+  let fetchFailed = false;
   const request = (async () => {
     do {
       try {
         await fetchDatasetSnapshot();
       } catch (_) {
         // A later SSE update retries; keep the previous list visible.
+        fetchFailed = true;
         return;
       }
       if (S.loaded) {
@@ -101,7 +103,12 @@ function refreshDatasetSnapshot(targetVersion) {
   })();
   S.datasetRefreshPromise = request;
   request.finally(() => {
-    if (S.datasetRefreshPromise === request) S.datasetRefreshPromise = null;
+    if (S.datasetRefreshPromise !== request) return;
+    S.datasetRefreshPromise = null;
+    // A newer SSE version can arrive between the loop condition and cleanup.
+    if (!fetchFailed && !S.stopped && S.datasetVersion < S.datasetRefreshTarget) {
+      refreshDatasetSnapshot(S.datasetRefreshTarget).catch(() => {});
+    }
   });
   return request;
 }
