@@ -229,13 +229,41 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 
 	var wg sync.WaitGroup
 	for i, r := range recs {
-		if err := datasetLimiter.Acquire(AppCtx); err != nil { break }
+		if err := datasetLimiter.Acquire(AppCtx); err != nil {
+			break
+		}
 		wg.Add(1)
 		go func(idx int, rec *DatasetRecord) {
 			defer wg.Done()
 			defer datasetLimiter.Release()
 			ProcessOne(job, idx, rec, action, c)
 		}(i, r)
+
+		// Stagger upload dataset startup so each newly admitted dataset can
+		// establish and stabilize real traffic before the next one is launched.
+		// Non-upload jobs and ds_jobs=1 keep their existing scheduling behavior.
+		if action == "upload" && i < len(recs)-1 {
+			_, currentLimit := datasetLimiter.Stats()
+			if currentLimit > 1 {
+				JobLog(job, "", fmt.Sprintf("多 WAN 启动节奏：等待第 %d 个数据集的上传速度爬升并稳定", i+1))
+				wait := waitForDatasetStartup(AppCtx, job, datasetLimiter)
+				switch {
+				case AppCtx.Err() != nil:
+					break
+				case wait.Stable:
+					JobLog(job, "", fmt.Sprintf("多 WAN 启动节奏：第 %d 个数据集速度稳定在 %.1f Mbps，等待 %.1f 秒，继续调度", i+1, wait.SpeedMbps, wait.Elapsed.Seconds()))
+				case wait.Active == 0:
+					JobLog(job, "", fmt.Sprintf("多 WAN 启动节奏：第 %d 个数据集已提前完成，继续调度", i+1))
+				case wait.Limit <= 1:
+					JobLog(job, "", "多 WAN 启动节奏：ds_jobs 已调整为 1，取消后续启动等待")
+				default:
+					JobLog(job, "", fmt.Sprintf("多 WAN 启动节奏：等待 %.1f 秒仍未稳定（当前 %.1f Mbps），超时放行下一个数据集", wait.Elapsed.Seconds(), wait.SpeedMbps))
+				}
+				if AppCtx.Err() != nil {
+					break
+				}
+			}
+		}
 	}
 	wg.Wait()
 
