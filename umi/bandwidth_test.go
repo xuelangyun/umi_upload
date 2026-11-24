@@ -352,6 +352,55 @@ func TestDecideBandwidthTune(t *testing.T) {
 }
 
 
+func TestWaitForDatasetStartupReturnsWhenThatDatasetFinishes(t *testing.T) {
+	job := &Job{M: NewMeter()}
+	limiter := NewDynamicLimiter(2)
+	if err := limiter.Acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := limiter.Acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	close(done)
+
+	started := time.Now()
+	result := waitForDatasetStartup(context.Background(), job, limiter, done)
+	if !result.Finished {
+		t.Fatal("wait should end when the specific dataset has finished")
+	}
+	if time.Since(started) > 250*time.Millisecond {
+		t.Fatalf("completed dataset wait took too long: %s", time.Since(started))
+	}
+	// Another dataset remains active; completion detection must not depend on
+	// the whole dataset limiter becoming idle.
+	if active, _ := limiter.Stats(); active != 2 {
+		t.Fatalf("active datasets = %d, want 2 during completion notification", active)
+	}
+	limiter.Release()
+	limiter.Release()
+}
+
+func TestStableUploadSpeed(t *testing.T) {
+	tests := []struct {
+		name    string
+		samples []float64
+		want    bool
+	}{
+		{name: "stable plateau", samples: []float64{100, 105, 110}, want: true},
+		{name: "still ramping", samples: []float64{80, 105, 130}, want: false},
+		{name: "near zero is not a usable plateau", samples: []float64{0.2, 0.2, 0.2}, want: false},
+		{name: "requires three samples", samples: []float64{100, 102}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stableUploadSpeed(tt.samples); got != tt.want {
+				t.Fatalf("stableUploadSpeed(%v) = %v, want %v", tt.samples, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShouldWaitForUploadActivityIncludesIdleJobs(t *testing.T) {
 	tests := []struct {
 		name string
