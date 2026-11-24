@@ -5,6 +5,10 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '
 const hms = s => { s = Math.round(s || 0); return [s / 3600 | 0, s / 60 % 60 | 0, s % 60].map(x => String(x).padStart(2, '0')).join(':'); };
 const sz = n => n >= 2 ** 30 ? (n / 2 ** 30).toFixed(2) + ' GB' : n >= 2 ** 20 ? (n / 2 ** 20).toFixed(1) + ' MB' : ((n || 0) / 1024).toFixed(0) + ' KB';
 
+const IME_COMPOSITION_GUARD_MS = 50;
+const isImeConfirmation = (event, compositionEndAt) =>
+  event.isComposing || (compositionEndAt !== null && Math.abs(event.timeStamp - compositionEndAt) < IME_COMPOSITION_GUARD_MS);
+
 const S = {
   D: [],            // 数据集（/api/state.datasets）
   RH: [], RS: {total: 0}, facets: {},   // 上传记录（/api/uploads 的明细/汇总/下拉选项）
