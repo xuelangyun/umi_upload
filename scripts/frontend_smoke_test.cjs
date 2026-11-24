@@ -283,6 +283,31 @@ test("dataset filtering caches results and selection counts stay incremental", (
   );
   assert.equal(vm.runInContext("rows() === rows()", context), true);
 
+  const firstOverview = vm.runInContext("datasetOverview()", context);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(firstOverview.facets)", context)),
+    {
+      device: ["D001", "D002"],
+      cap_date: ["2026-11-24"],
+      operator: ["Alice", "Bob"],
+    },
+  );
+  assert.equal(vm.runInContext("datasetOverview() === firstOverview", context), true);
+  vm.runInContext(
+    "S.D = S.D.map(row => row.id === '1' ? {...row, device:'D003', operator:'Carol'} : row);",
+    context,
+  );
+  const nextOverview = vm.runInContext("datasetOverview()", context);
+  assert.notEqual(nextOverview, firstOverview);
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(nextOverview.facets)", context)),
+    {
+      device: ["D002", "D003"],
+      cap_date: ["2026-11-24"],
+      operator: ["Alice", "Carol"],
+    },
+  );
+
   vm.runInContext("S.F.q = " + JSON.stringify("alice medicine"), context);
   assert.deepEqual(
     JSON.parse(vm.runInContext("JSON.stringify(rows().map(row => row.id))", context)),
