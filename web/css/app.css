@@ -51,9 +51,16 @@ select.narrow,.narrow{width:62px}.w58{width:54px}
 .chip{display:inline-flex;align-items:center;gap:2px;height:24px;border:1px solid var(--ln);border-radius:12px;padding:0 3px 0 10px;background:var(--s2);white-space:nowrap;font-size:12px}
 .chip i{cursor:pointer;color:var(--mu);font-style:normal;padding:0 6px;border-radius:10px}.chip i:hover{color:var(--bad);background:var(--bads)}
 .pp{border-left:3px solid var(--ac);display:flex;flex-direction:column;gap:8px}
-.pp-head{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:end}.pct{font:700 30px/1.1 var(--mono);color:var(--ac);letter-spacing:-.02em;min-width:104px}
-.metrics{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.35fr);gap:14px;min-width:0}
-.metric small{display:block;color:var(--mu);font-size:11px;white-space:nowrap}.metric{min-width:0}.metric b{display:block;font:700 14.5px/1.35 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Progress title/percentage and each metric use the same two-row grid:
+   labels share a baseline, values share a bottom baseline, including the idle state. */
+.pp-head{display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px;align-items:start}
+.pp-head>div:first-child{display:grid;grid-template-rows:18px 30px;align-content:start;min-width:104px}
+#ptitle{align-self:center;line-height:18px}
+.pct{align-self:end;font:700 30px/30px var(--mono);color:var(--ac);letter-spacing:-.02em;min-width:104px}
+.metrics{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.35fr);gap:14px;min-width:0;align-items:stretch}
+.metric{display:grid;grid-template-rows:18px 30px;min-width:0}
+.metric small{display:block;align-self:center;color:var(--mu);font-size:11px;line-height:18px;white-space:nowrap}
+.metric b{display:block;align-self:end;font:700 14.5px/30px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar{height:10px;border-radius:5px;background:var(--s3);overflow:hidden}
 .bar i{display:block;height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,var(--ac),var(--ac2));transition:width .4s}
 .bar.run i{background-image:linear-gradient(45deg,rgba(255,255,255,.22) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.22) 75%,transparent 75%);background-size:18px 18px;animation:st 1s linear infinite}@keyframes st{to{background-position:18px 0}}
