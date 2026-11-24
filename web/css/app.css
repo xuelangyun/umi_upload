@@ -415,3 +415,15 @@ button,select,.btn{touch-action:manipulation}
   .toolbar>#mvGrp{order:3}
   .toolbar>.btn.act{order:4}
 }
+
+
+/* Let interrupted-task notices wrap cleanly on tablet and mobile screens. */
+@media(max-width:900px){
+  .notice{margin-inline:14px;align-items:flex-start;flex-wrap:wrap;gap:6px 10px}
+  .notice>span:first-child{flex:1 1 100%;min-width:0;overflow-wrap:anywhere}
+  .notice>.grow{display:none}
+  .notice>.btn{margin-left:auto}
+}
+@media(max-width:640px){
+  .notice{margin-inline:12px}
+}
