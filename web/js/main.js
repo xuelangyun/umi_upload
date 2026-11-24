@@ -184,7 +184,7 @@ async function poll() {
 }
 
 function applyFullState(s, was) {
-  if (!s || !s.scan) return;
+  if (S.stopped || !s || !s.scan) return;
   S.loaded = true; S.lastFull = Date.now();
   S.D = s.datasets || []; S.PR = s.problems || []; S.roots = s.roots || [];
   S.busy = !!(s.job && !s.job.done); S.scanning = !!s.scan.running;
@@ -210,7 +210,7 @@ function applyFullState(s, was) {
 }
 
 function applyLiveState(s) {
-  if (!s || !s.scan) return;
+  if (S.stopped || !s || !s.scan) return;
   const busyNow = !!(s.job && !s.job.done);
   // 任务或扫描刚结束时必须重新获取完整快照，刷新列表、记录和最终结果。
   if ((S.busy && !busyNow) || (S.prevScan && !s.scan.running)) {
@@ -234,6 +234,7 @@ function applyLiveState(s) {
 }
 
 async function pollFallback() {
+  if (S.stopped) return;
   try {
     const state = await api('/api/state?realtime=1');
     applyLiveState(state);
@@ -242,9 +243,34 @@ async function pollFallback() {
   }
 }
 
+// Stop all client-side live refresh work after an intentional application exit.
+// EventSource otherwise keeps reconnecting while the goodbye dialog remains open.
+function stopLiveUpdates() {
+  S.stopped = true;
+  clearTimeout(S.timer);
+  S.timer = null;
+  clearTimeout(S.sseFallbackTimer);
+  S.sseFallbackTimer = null;
+  clearTimeout(S.datasetRetryTimer);
+  S.datasetRetryTimer = null;
+  if (S.events) {
+    S.events.close();
+    S.events = null;
+  }
+}
+
 function connectEvents() {
+  if (S.stopped) return;
   if (typeof EventSource === 'undefined') {
-    const fallback = () => { if (!S.stopped) pollFallback().finally(() => { S.timer = setTimeout(fallback, 1200); }); };
+    const fallback = () => {
+      if (S.stopped) {
+        S.timer = null;
+        return;
+      }
+      pollFallback().finally(() => {
+        if (!S.stopped) S.timer = setTimeout(fallback, 1200);
+      });
+    };
     fallback();
     return;
   }
@@ -252,9 +278,11 @@ function connectEvents() {
   S.events = source;
   let opened = false;
   source.addEventListener('state', event => {
+    if (S.stopped || S.events !== source) return;
     try { applyLiveState(JSON.parse(event.data)); } catch (_) { /* Ignore malformed event; reconnect snapshot repairs state. */ }
   });
   source.onopen = () => {
+    if (S.stopped || S.events !== source) return;
     const reconnected = opened;
     opened = true;
     if (S.sseFallbackTimer) {
@@ -265,16 +293,23 @@ function connectEvents() {
     if (!S.loaded || reconnected) poll().catch(() => {});
   };
   source.onerror = () => {
+    if (S.stopped || S.events !== source || source.readyState === EventSource.CLOSED) return;
     // EventSource normally reconnects itself. While it is disconnected, keep a
     // low-frequency HTTP fallback so the dashboard does not freeze during a
     // proxy timeout or a server restart.
     if (!S.sseFallbackTimer) {
       const fallback = () => {
-        if (S.stopped || source.readyState === EventSource.OPEN) {
+        if (S.stopped || S.events !== source || source.readyState === EventSource.OPEN) {
           S.sseFallbackTimer = null;
           return;
         }
-        pollFallback().finally(() => { S.sseFallbackTimer = setTimeout(fallback, 2000); });
+        pollFallback().finally(() => {
+          if (S.stopped || S.events !== source || source.readyState === EventSource.OPEN) {
+            S.sseFallbackTimer = null;
+            return;
+          }
+          S.sseFallbackTimer = setTimeout(fallback, 2000);
+        });
       };
       S.sseFallbackTimer = setTimeout(fallback, 1000);
     }
