@@ -24,6 +24,21 @@ test("classic frontend scripts expose a working datasetOverview helper", () => {
   assert.equal(vm.runInContext("typeof datasetOverview", context), "function");
   assert.equal(vm.runInContext("typeof renderProblemsButton", context), "function");
   assert.equal(vm.runInContext("typeof renderFmtSeg", context), "function");
+  const emptyMessages = JSON.parse(vm.runInContext(
+    `JSON.stringify({
+      noFilters: uploadRecordsEmptyMessage({}),
+      activeStatus: uploadRecordsEmptyMessage({status: "成功"}),
+      activeFormat: uploadRecordsEmptyMessage({fmt: "isuit"}),
+      whitespaceOnly: uploadRecordsEmptyMessage({q: "   "}),
+    })`,
+    context,
+  ));
+  assert.deepEqual(emptyMessages, {
+    noFilters: "暂无上传记录，完成上传任务后会显示在这里。",
+    activeStatus: "没有符合当前筛选条件的上传记录，请调整条件或点击「清除」。",
+    activeFormat: "没有符合当前筛选条件的上传记录，请调整条件或点击「清除」。",
+    whitespaceOnly: "暂无上传记录，完成上传任务后会显示在这里。",
+  });
   const imeChecks = JSON.parse(vm.runInContext(
     `JSON.stringify({
       nativeComposition: isImeConfirmation({isComposing: true, timeStamp: 100}, false, null),
