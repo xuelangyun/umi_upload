@@ -43,7 +43,7 @@ $('flt').addEventListener('keydown', e => {
 $('tb').addEventListener('change', onTableChange);
 $('mbody').addEventListener('change', e => { if (e.target.id === 'mvall') $('mbody').querySelectorAll('input[data-mv]:not(:disabled)').forEach(c => c.checked = e.target.checked); });
 $('tb').addEventListener('click', onTableClick);
-$('onlye').addEventListener('change', () => S.lastLog = '');
+$('onlye').addEventListener('change', () => S.lastLogOnly = null);
 document.querySelectorAll('[data-input=prt]').forEach(e => e.addEventListener('input', prt));
 
 /* ---- 主流程 ---- */
