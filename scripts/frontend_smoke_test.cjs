@@ -345,6 +345,7 @@ test("log rendering appends rolling updates without rebuilding existing rows", (
   };
   const onlyErrors = {checked: false};
   const document = {
+    getElementById: id => id === "lg" ? log : onlyErrors,
     createDocumentFragment() {
       return {children: [], append(element) { this.children.push(element); }};
     },
