@@ -1857,8 +1857,15 @@ func NewHandler(webFS fs.FS) http.Handler {
 				ct = "application/octet-stream"
 			}
 		}
+		sum := sha256.Sum256(data)
+		etag := fmt.Sprintf("\"%x\"", sum[:])
 		w.Header().Set("Content-Type", ct)
-		w.Header().Set("Cache-Control", "no-cache, max-age=0")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", etag)
+		if etagMatches(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
