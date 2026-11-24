@@ -1,4 +1,4 @@
-/* 入口：事件委托（data-act / data-change）+ 轮询 + 页签/扫描/任务的主流程。
+/* 入口：事件委托（data-act / data-change）+ SSE 状态推送 + 页签/扫描/任务的主流程。
    新增一个按钮：HTML 里写 data-act="名字"，在下面 ACT 表里加对应函数。 */
 const ACT = {
   cfg: el => setCfg({[el.dataset.k]: el.dataset.v}),
@@ -147,4 +147,5 @@ function connectEvents() {
   };
 }
 
+prt();
 poll().catch(() => {}).finally(connectEvents);
