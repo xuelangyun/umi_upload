@@ -89,3 +89,41 @@ async function loadRecords() {
     }
   }
 }
+
+/* 数据列表：仅在数据版本、筛选条件或排序字段变化时重新过滤/排序。分页和重绘复用结果。 */
+const lcs = value => String(value ?? '').toLowerCase();
+function rows() {
+  const f = S.F || {};
+  const datasetKey = S.datasetETag || ('v:' + (S.datasetVersion || 0) + ':' + S.D.length);
+  const filterKey = JSON.stringify([
+    datasetKey, f.fmt || '', f.type || '', f.device || '', f.cap_date || '',
+    f.operator || '', f.task || '', f.location || '', f.status || '', f.q || ''
+  ]);
+  const sortKey = filterKey + '\u0000' + S.sortK + '\u0000' + S.sortD;
+  if (S.datasetViewCache?.key === sortKey) return S.datasetViewCache.rows;
+
+  const task = lcs(f.task), location = lcs(f.location);
+  const words = lcs(f.q).replace(/\\\\/g, '/').split(/\\s+/).filter(Boolean);
+  const result = [];
+  for (const row of S.D) {
+    if (f.fmt && row.fmt !== f.fmt) continue;
+    if (f.type && row.type !== f.type) continue;
+    if (f.device && row.device !== f.device) continue;
+    if (f.cap_date && row.cap_date !== f.cap_date) continue;
+    if (f.operator && row.operator !== f.operator) continue;
+    if (task && !lcs(row.task).includes(task)) continue;
+    if (location && !lcs(row.location).includes(location)) continue;
+    if (f.status && !(f.status === 'mis' ? row.misplaced : f.status === 'warn' ? hasWarn(row) : row.up_state === f.status)) continue;
+    if (words.length) {
+      const searchable = lcs([row.name, row.source, row.task, row.sub_task, row.operator, row.rel, row.location, row.device, row.device_sn].join(' ')).replace(/\\\\/g, '/');
+      if (!words.every(word => searchable.includes(word))) continue;
+    }
+    result.push(row);
+  }
+  result.sort((a, b) => {
+    const x = a[S.sortK], y = b[S.sortK];
+    return (x > y ? 1 : x < y ? -1 : 0) * S.sortD || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+  });
+  S.datasetViewCache = {key: sortKey, filterKey, rows: result};
+  return result;
+}
