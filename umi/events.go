@@ -22,7 +22,7 @@ type sseSubscriber struct {
 	events      chan []byte
 	state       []byte
 	jobID       string
-	logs        []string
+	logSequence uint64
 }
 
 type sseHub struct {
@@ -39,7 +39,7 @@ func newSSEHub() *sseHub {
 
 // liveStateSnapshot takes one bounded snapshot shared by every connected
 // browser. The potentially large dataset table remains on /api/state.
-func liveStateSnapshot() (map[string]any, string, []string) {
+func liveStateSnapshot() (map[string]any, string, uint64, []string) {
 	scan := ScanView()
 
 	PL.Lock()
@@ -50,11 +50,13 @@ func liveStateSnapshot() (map[string]any, string, []string) {
 	}
 	var jobID, action string
 	var done bool
+	var logSequence uint64
 	var logs []string
 	if current != nil {
 		jobID = current.ID
 		action = current.Action
 		done = current.Done
+		logSequence = current.logSequence
 		logs = append([]string(nil), current.Log...)
 	}
 	PL.Unlock()
@@ -73,54 +75,28 @@ func liveStateSnapshot() (map[string]any, string, []string) {
 		"job":       jobValue,
 		"bandwidth": CurrentBandwidthTuneStatus(),
 		"dataset_version": datasetRowsVersion(),
-	}, jobID, logs
+	}, jobID, logSequence, logs
 }
 
-// logOverlap finds the longest prefix of current that is also a suffix of
-// previous. This keeps incremental delivery working when Job.Log reaches its
-// fixed history limit and drops its oldest entries on each append.
-func logOverlap(previous, current []string) int {
-	if len(previous) == 0 || len(current) == 0 {
-		return 0
-	}
-
-	// Build the KMP failure table for current, then scan previous once.
-	// The work is linear in the bounded server-side log history.
-	failure := make([]int, len(current))
-	for i, matched := 1, 0; i < len(current); i++ {
-		for matched > 0 && current[i] != current[matched] {
-			matched = failure[matched-1]
-		}
-		if current[i] == current[matched] {
-			matched++
-		}
-		failure[i] = matched
-	}
-
-	matched := 0
-	for _, line := range previous {
-		for matched > 0 && (matched == len(current) || line != current[matched]) {
-			matched = failure[matched-1]
-		}
-		if matched < len(current) && line == current[matched] {
-			matched++
-		}
-	}
-	return matched
-}
-
-// sseLogDelta returns only lines not already represented by the subscriber.
-// A job change or a log replacement without an overlapping sequence resets
-// the client tail; normal appends and bounded-history rollovers stay incremental.
-func sseLogDelta(previousJobID string, previous []string, currentJobID string, current []string) ([]string, bool) {
+// sseLogDelta uses each job's monotonic log sequence to find unseen lines.
+// The retained log window starts at currentSequence-len(current). If the
+// subscriber cursor is older than that window, a bounded reset is required.
+func sseLogDelta(previousJobID string, previousSequence uint64, currentJobID string, currentSequence uint64, current []string) ([]string, bool) {
 	if previousJobID != currentJobID {
 		return tailLog(current), true
 	}
-	overlap := logOverlap(previous, current)
-	if overlap > 0 || len(previous) == 0 {
-		return append([]string(nil), current[overlap:]...), false
+
+	retained := uint64(len(current))
+	if currentSequence < retained || previousSequence > currentSequence {
+		return tailLog(current), true
 	}
-	return tailLog(current), true
+	firstSequence := currentSequence - retained
+	if previousSequence < firstSequence {
+		return tailLog(current), true
+	}
+
+	start := previousSequence - firstSequence
+	return append([]string(nil), current[int(start):]...), false
 }
 
 func tailLog(lines []string) []string {
@@ -162,7 +138,7 @@ func encodeSSEState(state map[string]any, delta []string, reset bool) ([]byte, e
 // cursor and therefore cannot see duplicate or missing log lines.
 func (h *sseHub) subscribe() (<-chan []byte, func(), error) {
 	h.mu.Lock()
-	state, jobID, logs := liveStateSnapshot()
+	state, jobID, logSequence, logs := liveStateSnapshot()
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
 		h.mu.Unlock()
@@ -176,8 +152,8 @@ func (h *sseHub) subscribe() (<-chan []byte, func(), error) {
 	sub := &sseSubscriber{
 		events: make(chan []byte, sseClientBuffer),
 		state:  stateJSON,
-		jobID:  jobID,
-		logs:   append([]string(nil), logs...),
+		jobID:       jobID,
+		logSequence: logSequence,
 	}
 	sub.events <- frame
 	h.clients[sub] = struct{}{}
@@ -204,13 +180,13 @@ func (h *sseHub) subscribe() (<-chan []byte, func(), error) {
 // are disconnected instead of back-pressuring the upload workers or other
 // browser sessions; EventSource reconnects and the next subscription starts
 // from a fresh snapshot.
-func (h *sseHub) publishLocked(state map[string]any, jobID string, logs []string) {
+func (h *sseHub) publishLocked(state map[string]any, jobID string, logSequence uint64, logs []string) {
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
 		return
 	}
 	for sub := range h.clients {
-		delta, reset := sseLogDelta(sub.jobID, sub.logs, jobID, logs)
+		delta, reset := sseLogDelta(sub.jobID, sub.logSequence, jobID, logSequence, logs)
 		if bytes.Equal(sub.state, stateJSON) && !reset && len(delta) == 0 {
 			continue
 		}
@@ -222,7 +198,7 @@ func (h *sseHub) publishLocked(state map[string]any, jobID string, logs []string
 		case sub.events <- frame:
 			sub.state = append(sub.state[:0], stateJSON...)
 			sub.jobID = jobID
-			sub.logs = append(sub.logs[:0], logs...)
+			sub.logSequence = logSequence
 		default:
 			delete(h.clients, sub)
 			close(sub.events)
@@ -236,8 +212,8 @@ func (h *sseHub) publishCurrent() {
 	if len(h.clients) == 0 {
 		return
 	}
-	state, jobID, logs := liveStateSnapshot()
-	h.publishLocked(state, jobID, logs)
+	state, jobID, logSequence, logs := liveStateSnapshot()
+	h.publishLocked(state, jobID, logSequence, logs)
 }
 
 func (h *sseHub) run(ctx context.Context) {
@@ -325,7 +301,7 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 // liveHTTPStateSnapshot adds the bounded log tail needed by HTTP fallback.
 // It excludes metadata and the potentially large dataset list.
 func liveHTTPStateSnapshot() map[string]any {
-	state, _, logs := liveStateSnapshot()
+	state, _, _, logs := liveStateSnapshot()
 	if job, ok := state["job"].(map[string]any); ok {
 		job["log"] = tailLog(logs)
 	}
