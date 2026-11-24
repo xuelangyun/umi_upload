@@ -217,3 +217,25 @@ test("data table sorting and selection controls are keyboard and screen-reader a
   assert.ok(main.includes("event.detail === 0"));
   assert.ok(!main.includes("$('tb').addEventListener('keydown'"));
 });
+
+
+test("directory navigation and root removal use named native buttons", () => {
+  const panel = fs.readFileSync(path.resolve(__dirname, "..", "web/js/panel.js"), "utf8");
+  const dialogs = fs.readFileSync(path.resolve(__dirname, "..", "web/js/dialogs.js"), "utf8");
+  const css = fs.readFileSync(path.resolve(__dirname, "..", "web/css/app.css"), "utf8");
+
+  assert.ok(panel.includes('<button type="button" class="root-remove"'));
+  assert.ok(panel.includes('aria-label="移除目录 ${esc(r)}"'));
+  assert.ok(panel.includes('data-act="rmRoot"'));
+  assert.ok(!panel.includes('<i data-act="rmRoot"'));
+
+  assert.ok(dialogs.includes('<button type="button" class="dir-enter"'));
+  assert.ok(dialogs.includes('aria-label="进入上一级目录"'));
+  assert.ok(dialogs.includes('aria-label="进入目录 ${esc(dir.name)}"'));
+  assert.ok(dialogs.includes('data-act="enter"'));
+  assert.ok(!dialogs.includes('<span data-act="enter"'));
+
+  assert.ok(css.includes('.chip .root-remove:focus-visible') || css.includes('button:focus-visible'));
+  assert.ok(css.includes('.dirlist button.dir-enter'));
+  assert.ok(css.includes('.dirlist .dir-check-spacer'));
+});
