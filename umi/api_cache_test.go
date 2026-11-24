@@ -115,3 +115,52 @@ func TestDatasetEndpointUsesETag(t *testing.T) {
 		t.Fatalf("304 response did not report updated data version: first=%q second=%q", firstVersion, second.Header().Get("X-Dataset-Version"))
 	}
 }
+
+
+func TestStaticAssetsUseConditionalETags(t *testing.T) {
+	data := []byte("window.appVersion = 1;")
+	webFS := fstest.MapFS{
+		"js/app.js": &fstest.MapFile{Data: data},
+	}
+	handler := NewHandler(webFS)
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusOK)
+	}
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("static asset response did not include an ETag")
+	}
+	if got := first.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("Cache-Control = %q, want no-cache", got)
+	}
+	if first.Body.String() != string(data) {
+		t.Fatalf("static asset body = %q, want %q", first.Body.String(), data)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil)
+	req.Header.Set("If-None-Match", etag)
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, req)
+	if second.Code != http.StatusNotModified {
+		t.Fatalf("conditional status = %d, want %d", second.Code, http.StatusNotModified)
+	}
+	if second.Body.Len() != 0 {
+		t.Fatalf("304 response unexpectedly has body %q", second.Body.String())
+	}
+
+	webFS["js/app.js"] = &fstest.MapFile{Data: []byte("window.appVersion = 2;")}
+	updated := httptest.NewRecorder()
+	handler.ServeHTTP(updated, req)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("updated asset status = %d, want %d", updated.Code, http.StatusOK)
+	}
+	if updated.Header().Get("ETag") == etag {
+		t.Fatal("updated asset reused the previous ETag")
+	}
+	if updated.Body.String() != "window.appVersion = 2;" {
+		t.Fatalf("updated asset body = %q", updated.Body.String())
+	}
+}
