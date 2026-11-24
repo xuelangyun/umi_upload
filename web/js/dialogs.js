@@ -1,5 +1,72 @@
 /* 弹窗：扫描提示、目录选择、OSS 配置、退出服务。 */
-const openModal = id => $(id).style.display = 'flex', closeModal = id => $(id).style.display = 'none';
+const MODAL_FOCUSABLE = 'a[href],area[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),iframe,video[controls],audio[controls],[contenteditable="true"],[tabindex]:not([tabindex="-1"])';
+const modalReturnFocus = new WeakMap();
+
+function openModal(id) {
+  const modal = $(id);
+  if (!modal || modal.style.display === 'flex') return;
+  const dialog = modal.querySelector('.dlg');
+  modalReturnFocus.set(modal, document.activeElement);
+  modal.style.display = 'flex';
+  if (!dialog) return;
+  if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
+  const focusTarget = [...dialog.querySelectorAll(MODAL_FOCUSABLE)]
+    .find(el => !el.hidden && el.getClientRects().length > 0) || dialog;
+  focusTarget.focus({preventScroll: true});
+}
+
+function closeModal(id) {
+  const modal = $(id);
+  if (!modal) return;
+  modal.style.display = 'none';
+  const previous = modalReturnFocus.get(modal);
+  modalReturnFocus.delete(modal);
+  if (previous?.isConnected && typeof previous.focus === 'function') {
+    previous.focus({preventScroll: true});
+  }
+}
+
+function handleModalKeydown(event) {
+  let modal = null;
+  for (const candidate of document.querySelectorAll('.modal')) {
+    if (candidate.style.display === 'flex') modal = candidate;
+  }
+  if (!modal) return;
+
+  if (event.key === 'Escape') {
+    if (modal.classList.contains('solid')) return;
+    const closeButton = modal.querySelector('[data-act="closeVideo"], [data-act="closeModal"]');
+    if (closeButton) {
+      event.preventDefault();
+      closeButton.click();
+    }
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const dialog = modal.querySelector('.dlg');
+  if (!dialog) return;
+  const focusable = [...dialog.querySelectorAll(MODAL_FOCUSABLE)]
+    .filter(el => !el.hidden && el.getClientRects().length > 0);
+  if (!focusable.length) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (event.shiftKey) {
+    if (document.activeElement === first || !dialog.contains(document.activeElement)) {
+      event.preventDefault();
+      last.focus();
+    }
+  } else if (document.activeElement === last || !dialog.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+document.addEventListener('keydown', handleModalKeydown);
 
 /* ---- 扫描提示（扫描问题 + 数据行的日期/房间提示） ---- */
 function openProblems() {
