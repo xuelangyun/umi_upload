@@ -196,7 +196,7 @@ func invalidateDatasetRowsCache() {
 }
 
 func datasetRowsConfigKey(cfg map[string]string) string {
-	return BucketFor("isuit", cfg) + "\x00" + BucketFor("umi_v3", cfg)
+	return DBPath + "\x00" + BucketFor("isuit", cfg) + "\x00" + BucketFor("umi_v3", cfg)
 }
 
 // cachedDatasetRows serializes SQLite summaries, warning calculations, sorting,
