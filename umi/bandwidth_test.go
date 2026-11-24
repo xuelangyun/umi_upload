@@ -352,6 +352,26 @@ func TestDecideBandwidthTune(t *testing.T) {
 }
 
 
+func TestStableUploadSpeed(t *testing.T) {
+	tests := []struct {
+		name    string
+		samples []float64
+		want    bool
+	}{
+		{name: "stable plateau", samples: []float64{100, 105, 110}, want: true},
+		{name: "still ramping", samples: []float64{80, 105, 130}, want: false},
+		{name: "near zero is not a usable plateau", samples: []float64{0.2, 0.2, 0.2}, want: false},
+		{name: "requires three samples", samples: []float64{100, 102}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stableUploadSpeed(tt.samples); got != tt.want {
+				t.Fatalf("stableUploadSpeed(%v) = %v, want %v", tt.samples, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShouldWaitForUploadActivityIncludesIdleJobs(t *testing.T) {
 	tests := []struct {
 		name string
