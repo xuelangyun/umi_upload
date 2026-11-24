@@ -20,12 +20,17 @@ const CHANGE = {
 
 document.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && ACT[el.dataset.act]) ACT[el.dataset.act](el, e); });
 document.addEventListener('change', e => { const el = e.target.closest('[data-change]'); if (el && CHANGE[el.dataset.change]) CHANGE[el.dataset.change](el, e); });
+let imeCompositionActive = false;
 let lastCompositionEndAt = null;
-$('flt').addEventListener('compositionend', e => { lastCompositionEndAt = e.timeStamp; });
+$('flt').addEventListener('compositionstart', () => { imeCompositionActive = true; });
+$('flt').addEventListener('compositionend', e => {
+  imeCompositionActive = false;
+  lastCompositionEndAt = e.timeStamp;
+});
 $('flt').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  if (isImeConfirmation(e, lastCompositionEndAt)) return;
+  if (isImeConfirmation(e, imeCompositionActive, lastCompositionEndAt)) return;
   query();
 });
 $('tb').addEventListener('change', onTableChange);
