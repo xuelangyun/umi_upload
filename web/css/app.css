@@ -367,3 +367,18 @@ button,select,.btn{touch-action:manipulation}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+
+/* Existing interaction cues: sortable headers, hover rows, and segmented controls. */
+.table-wrap th{cursor:default}
+.table-wrap th[data-act="sort"]{cursor:pointer}
+.table-wrap th[data-act="sort"]:hover{color:var(--tx);background:var(--s3)}
+.table-wrap tbody tr:hover:not(.dw){background:var(--acs)}
+.seg button:hover:not(:disabled):not(.on){background:var(--acs);color:var(--ac)}
+.tabs button:hover:not(.on){color:var(--tx)}
+.dirlist,.gbody,#lg,.table-wrap{scrollbar-color:color-mix(in srgb,var(--mu) 55%,transparent) transparent;scrollbar-width:thin}
+.dlg,.gbody{overscroll-behavior:contain}
+@media(prefers-color-scheme:dark){
+  .tag.f-isuit{background:rgba(14,116,144,.24);color:#78d9ef}
+  .tag.f-umi{background:rgba(124,58,237,.24);color:#c5a8ff}
+}
