@@ -3,20 +3,30 @@
 /* Shared dataset overview for filters, warning badges, and format controls. */
 function datasetOverview() {
   const key = S.datasetETag || `v:${S.datasetVersion || 0}:${S.D.length}`;
-  if (S.datasetOverviewCache?.key === key) return S.datasetOverviewCache;
+  const cached = S.datasetOverviewCache;
+  if (cached?.key === key && cached.data === S.D) return cached;
   S.selectionStats = null;
 
   const stats = {total: S.D.length, isuit: 0, umi_v3: 0, warn: 0, misplaced: 0};
   const byId = new Map();
+  const optionSets = {device: new Set(), cap_date: new Set(), operator: new Set()};
   for (const row of S.D) {
     byId.set(row.id, row);
     if (isUmi(row)) stats.umi_v3++;
     else stats.isuit++;
     if (movable(row)) stats.misplaced++;
     if (hasWarn(row)) stats.warn++;
+    if (row.device) optionSets.device.add(row.device);
+    if (row.cap_date) optionSets.cap_date.add(row.cap_date);
+    if (row.operator) optionSets.operator.add(row.operator);
   }
 
-  const overview = {key, stats, byId};
+  const facets = {}, facetKeys = {};
+  for (const key of Object.keys(optionSets)) {
+    facets[key] = [...optionSets[key]].sort();
+    facetKeys[key] = facets[key].join('\\u0001');
+  }
+  const overview = {key, data: S.D, stats, byId, facets, facetKeys};
   S.datasetOverviewCache = overview;
   return overview;
 }
@@ -41,8 +51,9 @@ function setFmt(el) { S.F = Object.assign({}, S.F, {fmt: el.dataset.v}); S.page 
 function refresh() { S.view === 1 ? draw() : loadRecords(); }          // 重新取/画当前页签
 
 /* 下拉选项只在内容变化时重建（避免轮询时闪烁、打断用户正在打开的下拉） */
-function setOptions(id, vals, allLabel) {
-  const u = [...new Set(vals)].filter(Boolean).sort(), key = S.view + u.join('\u0001');
+function setOptions(id, vals, allLabel, preparedKey) {
+  const u = preparedKey === undefined ? [...new Set(vals)].filter(Boolean).sort() : vals;
+  const key = S.view + (preparedKey === undefined ? u.join('\\u0001') : preparedKey);
   if (S.sig[id] === key) return;
   S.sig[id] = key;
   const sel = $(id), v = sel.value;
@@ -50,8 +61,17 @@ function setOptions(id, vals, allLabel) {
   sel.value = u.includes(v) ? v : '';
 }
 function fillOptions() {
-  const f = S.view === 1 ? {device: S.D.map(r => r.device), cap_date: S.D.map(r => r.cap_date), operator: S.D.map(r => r.operator)} : S.facets;
-  setOptions('fd', f.device || [], '全部设备'); setOptions('fe', f.cap_date || [], '全部采集日期'); setOptions('fo', f.operator || [], '全部人员');
+  if (S.view === 1) {
+    const {facets, facetKeys} = datasetOverview();
+    setOptions('fd', facets.device, '全部设备', facetKeys.device);
+    setOptions('fe', facets.cap_date, '全部采集日期', facetKeys.cap_date);
+    setOptions('fo', facets.operator, '全部人员', facetKeys.operator);
+    return;
+  }
+  const f = S.facets;
+  setOptions('fd', f.device || [], '全部设备');
+  setOptions('fe', f.cap_date || [], '全部采集日期');
+  setOptions('fo', f.operator || [], '全部人员');
 }
 
 let recordsController = null;
