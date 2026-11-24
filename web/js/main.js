@@ -146,8 +146,7 @@ function refreshDatasetSnapshot(targetVersion) {
         const snapshot = await fetchDatasetSnapshot();
         S.datasetRetryDelay = 1000;
         if (snapshot.contentChanged && S.loaded && !S.pollPromise) {
-          const have = new Set(S.D.map(row => row.id));
-          pruneSelection(have);
+          if (S.sel.size) pruneSelection(datasetOverview().byId);
           // Dataset snapshots can change independently of a full-state poll.
           // Keep the device/date/operator query facets in sync with the new rows.
           if (S.view === 1) fillOptions();
