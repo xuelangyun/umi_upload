@@ -149,7 +149,7 @@ td.vlink{color:var(--ac)}.fold{margin-left:6px;opacity:.65}.fold:hover{opacity:1
 #mc .cfg-retry{grid-column:1/-1;border-top:1px solid var(--ln);margin-top:4px}
 #mc #cmsg{min-height:18px;margin-top:4px}
 #mc .dlg-f{position:sticky;bottom:-14px;background:var(--sf);padding:8px 0 2px;margin-top:6px;border-top:1px solid var(--ln)}
-@media(max-width:700px){#mc .cfg-grid{grid-template-columns:1fr}#mc .cfg-retry{grid-column:auto}#mc .cfg-three{gap:5px}#mc .config-dlg{max-height:96vh;padding:12px}}
+@media(max-width:700px){#mc .cfg-grid{grid-template-columns:1fr}#mc .cfg-retry{grid-column:auto}#mc .cfg-three{gap:5px}#mc .config-dlg{max-height:94dvh;padding:12px}}
 
 /* 功能区块卡片化：配置方案、存储、并发、带宽调优、网络恢复各自独立 */
 #mc .cfg-profile{background:var(--sf2,var(--sf));border:1px solid var(--ln);border-radius:10px;padding:9px 12px;margin:8px 0 10px}
