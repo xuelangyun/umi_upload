@@ -26,16 +26,18 @@ test("classic frontend scripts expose a working datasetOverview helper", () => {
   assert.equal(vm.runInContext("typeof renderFmtSeg", context), "function");
   const imeChecks = JSON.parse(vm.runInContext(
     `JSON.stringify({
-      nativeComposition: isImeConfirmation({isComposing: true, timeStamp: 100}, null),
-      eventBeforeCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 980}, 1000),
-      eventJustAfterCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 1030}, 1000),
-      eventOutsideGuardWindow: isImeConfirmation({isComposing: false, timeStamp: 1051}, 1000),
-      ordinaryEnter: isImeConfirmation({isComposing: false, timeStamp: 1051}, null),
+      nativeComposition: isImeConfirmation({isComposing: true, timeStamp: 100}, false, null),
+      trackedComposition: isImeConfirmation({isComposing: false, timeStamp: 100}, true, null),
+      eventBeforeCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 980}, false, 1000),
+      eventJustAfterCompositionEnd: isImeConfirmation({isComposing: false, timeStamp: 1030}, false, 1000),
+      eventOutsideGuardWindow: isImeConfirmation({isComposing: false, timeStamp: 1051}, false, 1000),
+      ordinaryEnter: isImeConfirmation({isComposing: false, timeStamp: 1051}, false, null),
     })`,
     context,
   ));
   assert.deepEqual(imeChecks, {
     nativeComposition: true,
+    trackedComposition: true,
     eventBeforeCompositionEnd: true,
     eventJustAfterCompositionEnd: true,
     eventOutsideGuardWindow: false,
