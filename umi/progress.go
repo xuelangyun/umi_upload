@@ -126,22 +126,23 @@ type JobContext struct {
 
 // Job represents an entire batch upload / verify / verify_deep run.
 type Job struct {
-	UploadLimiter *DynamicLimiter
+	UploadLimiter  *DynamicLimiter
 	DatasetLimiter *DynamicLimiter
-	ID         string
-	Action     string
-	RunID      int64
-	Count      int
-	TotalUnits int64
-	Base       int64
-	Units      []int64
-	Items      []JobItem
-	Done       bool
-	T0         float64
-	TEnd       *float64
-	Log        []string
-	Actives    []*JobContext
-	M          *Meter
+	ID             string
+	Action         string
+	RunID          int64
+	Count          int
+	TotalUnits     int64
+	Base           int64
+	Units          []int64
+	Items          []JobItem
+	Done           bool
+	T0             float64
+	TEnd           *float64
+	Log            []string
+	logSequence    uint64 // Total log entries appended since this job started.
+	Actives        []*JobContext
+	M              *Meter
 }
 
 func JobLog(j *Job, tag string, text string) {
@@ -156,6 +157,7 @@ func JobLog(j *Job, tag string, text string) {
 	line := fmt.Sprintf("[%s] %s%s", ts, prefix, text)
 	PL.Lock()
 	j.Log = append(j.Log, line)
+	j.logSequence++
 	if len(j.Log) > sseLogHistoryLimit {
 		j.Log = append([]string(nil), j.Log[len(j.Log)-sseLogHistoryLimit:]...)
 	}

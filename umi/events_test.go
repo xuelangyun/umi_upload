@@ -13,24 +13,25 @@ import (
 
 func TestSSELogDelta(t *testing.T) {
 	tests := []struct {
-		name      string
-		prevID    string
-		prev      []string
-		currentID string
-		current   []string
-		want      []string
-		wantReset bool
+		name            string
+		previousJobID   string
+		previousSeq     uint64
+		currentJobID    string
+		currentSeq      uint64
+		current         []string
+		want            []string
+		wantReset       bool
 	}{
-		{name: "first snapshot", currentID: "job-1", current: []string{"one", "two"}, want: []string{"one", "two"}, wantReset: true},
-		{name: "append", prevID: "job-1", prev: []string{"one", "two"}, currentID: "job-1", current: []string{"one", "two", "three"}, want: []string{"three"}},
-		{name: "unchanged", prevID: "job-1", prev: []string{"one"}, currentID: "job-1", current: []string{"one"}, want: nil},
-		{name: "new job", prevID: "job-1", prev: []string{"one"}, currentID: "job-2", current: []string{"fresh"}, want: []string{"fresh"}, wantReset: true},
-		{name: "log rollover with overlap", prevID: "job-1", prev: []string{"old-1", "old-2", "old-3"}, currentID: "job-1", current: []string{"old-2", "old-3", "new"}, want: []string{"new"}},
-		{name: "replaced log without overlap", prevID: "job-1", prev: []string{"old-1", "old-2"}, currentID: "job-1", current: []string{"new-1", "new-2"}, want: []string{"new-1", "new-2"}, wantReset: true},
+		{name: "first snapshot", currentJobID: "job-1", currentSeq: 2, current: []string{"one", "two"}, want: []string{"one", "two"}, wantReset: true},
+		{name: "append", previousJobID: "job-1", previousSeq: 2, currentJobID: "job-1", currentSeq: 3, current: []string{"one", "two", "three"}, want: []string{"three"}},
+		{name: "unchanged", previousJobID: "job-1", previousSeq: 1, currentJobID: "job-1", currentSeq: 1, current: []string{"one"}},
+		{name: "new job", previousJobID: "job-1", previousSeq: 8, currentJobID: "job-2", currentSeq: 1, current: []string{"fresh"}, want: []string{"fresh"}, wantReset: true},
+		{name: "subscriber fell behind retained history", previousJobID: "job-1", previousSeq: 0, currentJobID: "job-1", currentSeq: 3, current: []string{"two", "three"}, want: []string{"two", "three"}, wantReset: true},
+		{name: "sequence moved backwards", previousJobID: "job-1", previousSeq: 5, currentJobID: "job-1", currentSeq: 4, current: []string{"four"}, want: []string{"four"}, wantReset: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, reset := sseLogDelta(tt.prevID, tt.prev, tt.currentID, tt.current)
+			got, reset := sseLogDelta(tt.previousJobID, tt.previousSeq, tt.currentJobID, tt.currentSeq, tt.current)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("delta = %#v, want %#v", got, tt.want)
 			}
@@ -42,13 +43,15 @@ func TestSSELogDelta(t *testing.T) {
 }
 
 func TestSSELogDeltaBeyondDisplayTailRemainsIncremental(t *testing.T) {
-	previous := make([]string, sseLogLimit+20)
-	for i := range previous {
-		previous[i] = fmt.Sprintf("line-%d", i)
+	current := make([]string, sseLogLimit+20)
+	for i := range current {
+		current[i] = fmt.Sprintf("line-%d", i)
 	}
-	current := append(append([]string(nil), previous...), "new-line")
+	currentSeq := uint64(len(current))
+	current = append(current, "new-line")
+	currentSeq++
 
-	got, reset := sseLogDelta("job-1", previous, "job-1", current)
+	got, reset := sseLogDelta("job-1", currentSeq-1, "job-1", currentSeq, current)
 	if reset {
 		t.Fatal("appending beyond the UI tail limit must remain incremental")
 	}
@@ -64,12 +67,28 @@ func TestSSELogDeltaAtServerHistoryRolloverRemainsIncremental(t *testing.T) {
 	}
 	current := append(append([]string(nil), previous[1:]...), "new-line")
 
-	got, reset := sseLogDelta("job-1", previous, "job-1", current)
+	got, reset := sseLogDelta("job-1", sseLogHistoryLimit, "job-1", sseLogHistoryLimit+1, current)
 	if reset {
 		t.Fatal("server history rollover must not reset the client log tail")
 	}
 	if !reflect.DeepEqual(got, []string{"new-line"}) {
 		t.Fatalf("delta = %#v, want only the newly appended line", got)
+	}
+}
+
+func TestJobLogSequenceTracksBoundedHistory(t *testing.T) {
+	job := &Job{}
+	for i := 0; i < sseLogHistoryLimit+2; i++ {
+		JobLog(job, "", fmt.Sprintf("line-%d", i))
+	}
+	if job.logSequence != uint64(sseLogHistoryLimit+2) {
+		t.Fatalf("log sequence = %d, want %d", job.logSequence, sseLogHistoryLimit+2)
+	}
+	if len(job.Log) != sseLogHistoryLimit {
+		t.Fatalf("retained log length = %d, want %d", len(job.Log), sseLogHistoryLimit)
+	}
+	if !strings.HasSuffix(job.Log[0], "line-2") || !strings.HasSuffix(job.Log[len(job.Log)-1], fmt.Sprintf("line-%d", sseLogHistoryLimit+1)) {
+		t.Fatal("bounded history does not contain the expected most recent lines")
 	}
 }
 
@@ -95,12 +114,12 @@ func TestSSEHubKeepsIndependentClientLogCursors(t *testing.T) {
 		"bandwidth": map[string]any{"current_mbps": 1.0},
 	}
 	stateJSON, _ := json.Marshal(state)
-	first := &sseSubscriber{events: make(chan []byte, 2), state: stateJSON, jobID: "job-1", logs: []string{"one"}}
-	second := &sseSubscriber{events: make(chan []byte, 2), state: stateJSON, jobID: "job-1", logs: []string{"one", "two"}}
+	first := &sseSubscriber{events: make(chan []byte, 2), state: stateJSON, jobID: "job-1", logSequence: 1}
+	second := &sseSubscriber{events: make(chan []byte, 2), state: stateJSON, jobID: "job-1", logSequence: 2}
 	h.clients[first] = struct{}{}
 	h.clients[second] = struct{}{}
 
-	h.publishLocked(state, "job-1", []string{"one", "two", "three"})
+	h.publishLocked(state, "job-1", 3, []string{"one", "two", "three"})
 
 	readPayload := func(ch <-chan []byte) map[string]any {
 		t.Helper()
@@ -134,7 +153,7 @@ func TestSSEHubDisconnectsSlowSubscriber(t *testing.T) {
 	sub.events <- []byte("queued")
 	h.clients[sub] = struct{}{}
 
-	h.publishLocked(map[string]any{"value": 2}, "", nil)
+	h.publishLocked(map[string]any{"value": 2}, "", 0, nil)
 
 	if _, exists := h.clients[sub]; exists {
 		t.Fatal("slow subscriber was not removed")
