@@ -201,7 +201,7 @@ func datasetRowsConfigKey(cfg map[string]string) string {
 
 // cachedDatasetRows serializes SQLite summaries, warning calculations, sorting,
 // and JSON encoding once per data version. Callers treat rows/body as immutable.
-func cachedDatasetRows(cfg map[string]string) ([]map[string]any, []byte, string, error) {
+func cachedDatasetRows(cfg map[string]string) ([]map[string]any, []byte, string, uint64, error) {
 	key := datasetRowsConfigKey(cfg)
 	datasetRowsCache.mu.Lock()
 	defer datasetRowsCache.mu.Unlock()
@@ -209,13 +209,13 @@ func cachedDatasetRows(cfg map[string]string) ([]map[string]any, []byte, string,
 	if datasetRowsCache.rows != nil &&
 		datasetRowsCache.builtVersion == datasetRowsCache.version &&
 		datasetRowsCache.configKey == key {
-		return datasetRowsCache.rows, datasetRowsCache.body, datasetRowsCache.etag, nil
+		return datasetRowsCache.rows, datasetRowsCache.body, datasetRowsCache.etag, datasetRowsCache.builtVersion, nil
 	}
 
 	rows := buildDatasetRows(cfg)
 	body, err := jsonMarshalNoEscape(rows, "")
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", 0, err
 	}
 	sum := sha256.Sum256(body)
 	etag := fmt.Sprintf("\"%x\"", sum[:])
@@ -225,11 +225,17 @@ func cachedDatasetRows(cfg map[string]string) ([]map[string]any, []byte, string,
 	datasetRowsCache.etag = etag
 	datasetRowsCache.configKey = key
 	datasetRowsCache.builtVersion = datasetRowsCache.version
-	return rows, body, etag, nil
+	return rows, body, etag, datasetRowsCache.builtVersion, nil
 }
 
+func datasetRowsVersion() uint64 {
+	datasetRowsCache.mu.Lock()
+	version := datasetRowsCache.version
+	datasetRowsCache.mu.Unlock()
+	return version
+}
 func DatasetRows() []map[string]any {
-	rows, _, _, err := cachedDatasetRows(ActiveCfg())
+	rows, _, _, _, err := cachedDatasetRows(ActiveCfg())
 	if err != nil {
 		return []map[string]any{}
 	}
@@ -1764,7 +1770,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 		return
 	}
-	_, body, etag, err := cachedDatasetRows(ActiveCfg())
+	_, body, etag, version, err := cachedDatasetRows(ActiveCfg())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "生成数据集快照失败: " + err.Error()})
 		return
@@ -1772,6 +1778,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("ETag", etag)
+	w.Header().Set("X-Dataset-Version", strconv.FormatUint(version, 10))
 	if etagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
