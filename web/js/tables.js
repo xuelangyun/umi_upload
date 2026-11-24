@@ -67,8 +67,11 @@ function uploadRecordsEmptyMessage(filters = S.F) {
 }
 
 function draw() {
-  const ps = +$('ps').value;
+  const ps = $('ps').value === 'all' ? Infinity : Math.max(1, Number($('ps').value) || 100);
   document.querySelectorAll('.act').forEach(b => b.disabled = S.busy || S.scanning);
+  document.querySelectorAll('.pager button[data-act="page"]').forEach(button => {
+    button.hidden = !Number.isFinite(ps);
+  });
   $('bup').textContent = '上传选中' + (S.sel.size ? ` (${S.sel.size})` : '');
   $('xlsBtn').hidden = S.view !== 2;                     // 「导出 Excel」只在上传记录页签显示
   renderFmtSeg(); renderMoveBtns();
@@ -97,8 +100,9 @@ function renderMoveBtns() {
 }
 
 function drawRecords(ps) {
-  const RS = S.RS, pages = Math.max(1, Math.ceil(RS.total / ps));
-  $('pgi').textContent = `${S.page + 1} / ${pages} 页 · 共 ${RS.total} 条`;
+  const RS = S.RS, pages = Number.isFinite(ps) ? Math.max(1, Math.ceil(RS.total / ps)) : 1;
+  S.page = Math.min(S.page, pages - 1);
+  $('pgi').textContent = Number.isFinite(ps) ? `${S.page + 1} / ${pages} 页 · 共 ${RS.total} 条` : `全部 ${RS.total} 条`;
   $('cards').innerHTML = `查询结果：<b>${RS.total}</b> 条记录 · <b>${RS.datasets || 0}</b> 个数据集 · 累计采集时长 <b>${hms(RS.duration)}</b> · 体积 <b>${sz(RS.size)}</b> <span class="muted">｜ 已上传 ${RS.ok_datasets || 0} 个 · ${hms(RS.ok_duration)} · ${sz(RS.ok_size)}</span>`;
   const RC = REC_COLS;
   $('tb').innerHTML = '<thead><tr>' + RC.map(c => `<th class="${c[1] ? 'n' : ''}">${c[0]}</th>`).join('') + '</tr></thead>' +
@@ -128,9 +132,10 @@ function datasetFilteredStats() {
 
 function drawDatasets(ps) {
   S.R = rows();
-  const pages = Math.max(1, Math.ceil(S.R.length / ps)); S.page = Math.min(S.page, pages - 1);
-  const page = S.R.slice(S.page * ps, (S.page + 1) * ps);
-  $('pgi').textContent = `${S.page + 1} / ${pages} 页 · 共 ${S.R.length} 条`;
+  const pages = Number.isFinite(ps) ? Math.max(1, Math.ceil(S.R.length / ps)) : 1;
+  S.page = Math.min(S.page, pages - 1);
+  const page = Number.isFinite(ps) ? S.R.slice(S.page * ps, (S.page + 1) * ps) : S.R;
+  $('pgi').textContent = Number.isFinite(ps) ? `${S.page + 1} / ${pages} 页 · 共 ${S.R.length} 条` : `全部 ${S.R.length} 条`;
   const n = datasetFilteredStats();
   $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(n.duration)}</b> · 体积 <b>${sz(n.size)}</b> <span class="muted">｜ 日期不一致 ${n.dateWarn} · 房间格式 ${n.roomBad} ·${n.umi ? ` UMI 时长&lt;3分钟 ${n.shortCal} ·` : ''}${n.isuit ? ` ISuit 错放 ${n.misplaced} ·` : ''} 设备≠SN ${n.devDiff} · 已上传 ${n.uploaded} · 已选 ${S.sel.size}</span>`;
   const th = c => {
