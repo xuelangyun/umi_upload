@@ -63,9 +63,24 @@ async function run(action) {
 /* 完整状态通过 HTTP 首次加载/操作后刷新；运行进度、扫描进度和带宽状态由 SSE 推送。 */
 async function poll() {
   if (S.stopped) return;
-  const was = S.busy;
-  const s = await api('/api/state');
-  applyFullState(s, was);
+  if (S.pollPromise) {
+    S.pollAgain = true;
+    return S.pollPromise;
+  }
+  const request = (async () => {
+    do {
+      S.pollAgain = false;
+      const was = S.busy;
+      const s = await api('/api/state');
+      applyFullState(s, was);
+    } while (S.pollAgain && !S.stopped);
+  })();
+  S.pollPromise = request;
+  try {
+    await request;
+  } finally {
+    if (S.pollPromise === request) S.pollPromise = null;
+  }
 }
 
 function applyFullState(s, was) {
@@ -140,19 +155,28 @@ function connectEvents() {
     try { applyLiveState(JSON.parse(event.data)); } catch (_) { /* Ignore malformed event; reconnect snapshot repairs state. */ }
   });
   source.onopen = () => {
-    if (opened) {
-      // EventSource has reconnected. Reconcile any changes missed during the outage.
-      poll().catch(() => {});
-    }
+    const reconnected = opened;
     opened = true;
+    if (S.sseFallbackTimer) {
+      clearTimeout(S.sseFallbackTimer);
+      S.sseFallbackTimer = null;
+    }
+    // Retry the initial HTTP snapshot if it failed, and reconcile after every reconnect.
+    if (!S.loaded || reconnected) poll().catch(() => {});
   };
   source.onerror = () => {
-    if (source.readyState === EventSource.CLOSED && !S.sseFallbackTimer) {
+    // EventSource normally reconnects itself. While it is disconnected, keep a
+    // low-frequency HTTP fallback so the dashboard does not freeze during a
+    // proxy timeout or a server restart.
+    if (!S.sseFallbackTimer) {
       const fallback = () => {
-        if (S.stopped || source.readyState !== EventSource.CLOSED) { S.sseFallbackTimer = null; return; }
+        if (S.stopped || source.readyState === EventSource.OPEN) {
+          S.sseFallbackTimer = null;
+          return;
+        }
         pollFallback().finally(() => { S.sseFallbackTimer = setTimeout(fallback, 2000); });
       };
-      S.sseFallbackTimer = setTimeout(fallback, 0);
+      S.sseFallbackTimer = setTimeout(fallback, 1000);
     }
   };
 }
