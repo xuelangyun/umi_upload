@@ -20,7 +20,8 @@ const S = {
   buckets: {}, formats: {},   // 两种数据格式各自的桶 {isuit: 'hw-upload', umi_v3: 'prt-huawei'} / 格式名（/api/state）；会话格式由目录名决定，每行 r.fmt
   loaded: false, lastFull: 0,   // 最近一次完整状态快照
   roots: [], jobID: '', jobLog: [], events: null, liveRefresh: false, sseFallbackTimer: null,
-  pollPromise: null, pollAgain: false, datasetETag: '',
+  pollPromise: null, pollAgain: false, datasetETag: '', datasetVersion: 0,
+  datasetRefreshTarget: 0, datasetRefreshPromise: null,
 };
 
 /* 状态文字 → 样式类（tag 颜色） */
