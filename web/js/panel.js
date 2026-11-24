@@ -20,7 +20,7 @@ function renderNotice(n) {
 }
 
 function renderRoots(roots) {
-  $('roots').innerHTML = roots.map(r => `<span class="chip" title="${esc(r)}">${esc(r)}<i data-act="rmRoot" data-r="${esc(r)}">✕</i></span>`).join('');
+  $('roots').innerHTML = roots.map(r => `<span class="chip" title="${esc(r)}">${esc(r)}<button type="button" class="root-remove" data-act="rmRoot" data-r="${esc(r)}" aria-label="移除目录 ${esc(r)}" title="移除目录"><span aria-hidden="true">✕</span></button></span>`).join('');
 }
 
 /* 城市+房间 → 上传路径里的 PRT 目录预览 */
