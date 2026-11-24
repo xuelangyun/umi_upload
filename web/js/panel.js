@@ -39,7 +39,7 @@ function setScanUi(sc, nRoots) {
 }
 
 function renderProblemsButton() {
-  const nw = S.D.filter(hasWarn).length, n = S.PR.length + nw, b = $('probBtn');
+  const nw = datasetOverview().stats.warn, n = S.PR.length + nw, b = $('probBtn');
   b.hidden = !n; b.textContent = '⚠ 提示 ' + n;
   return nw;
 }
