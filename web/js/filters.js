@@ -53,7 +53,8 @@ function datasetOverview() {
   for (const r of S.D) {
     byId.set(r.id, r);
     if (isUmi(r)) stats.umi_v3++;
-    else { stats.isuit++; if (movable(r)) stats.misplaced++; }
+    else stats.isuit++;
+    if (movable(r)) stats.misplaced++;
     if (hasWarn(r)) stats.warn++;
   }
   const result = {key, stats, byId};
