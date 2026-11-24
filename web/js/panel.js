@@ -82,57 +82,53 @@ function renderLog(lines) {
   const log = $('lg'), onlyErrors = $('onlye').checked;
   const previous = S.lastLogSource || [], next = Array.isArray(lines) ? lines : [];
   if (next === S.lastLogSource && onlyErrors === S.lastLogOnly) return;
-  const sameMode = onlyErrors === S.lastLogOnly;
-  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 10;
-  const appendLines = values => {
+
+  const isVisible = line => !onlyErrors || /✘|错误|失败/.test(line);
+  const createFragment = values => {
     const fragment = document.createDocumentFragment();
     for (const line of values) {
-      if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
+      if (!isVisible(line)) continue;
       const item = document.createElement('div');
       item.className = /✘|\[错误\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \[/.test(line) ? 'h' : '';
       item.textContent = line;
       fragment.append(item);
     }
-    log.append(fragment);
+    return fragment;
   };
 
+  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 10;
+  const sameMode = onlyErrors === S.lastLogOnly;
   let updatedIncrementally = false;
-  if (!onlyErrors && sameMode && previous.length) {
+
+  if (sameMode && previous.length) {
     let overlap = Math.min(previous.length, next.length);
     while (overlap > 0) {
       const offset = previous.length - overlap;
       let matches = true;
       for (let i = 0; i < overlap; i++) {
-        if (previous[offset + i] !== next[i]) { matches = false; break; }
+        if (previous[offset + i] !== next[i]) {
+          matches = false;
+          break;
+        }
       }
       if (matches) break;
       overlap--;
     }
+
     if (overlap > 0) {
       const removeCount = previous.length - overlap;
-      for (let i = 0; i < removeCount && log.firstElementChild; i++) log.firstElementChild.remove();
-      appendLines(next.slice(overlap));
+      const visibleRemoved = onlyErrors ? previous.slice(0, removeCount).filter(isVisible).length : removeCount;
+      for (let i = 0; i < visibleRemoved && log.firstElementChild; i++) log.firstElementChild.remove();
+      log.append(createFragment(next.slice(overlap)));
       updatedIncrementally = true;
     }
   }
 
-  if (!updatedIncrementally) {
-    const fragment = document.createDocumentFragment();
-    for (const line of next) {
-      if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
-      const item = document.createElement('div');
-      item.className = /✘|\[错误\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \[/.test(line) ? 'h' : '';
-      item.textContent = line;
-      fragment.append(item);
-    }
-    log.replaceChildren(fragment);
-  }
-
+  if (!updatedIncrementally) log.replaceChildren(createFragment(next));
   S.lastLogSource = next;
   S.lastLogOnly = onlyErrors;
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
-
 
 /* 独立带宽状态：指标实时刷新，最近一次并发调整常驻显示 */
 const BW_STATE_LABEL = {
