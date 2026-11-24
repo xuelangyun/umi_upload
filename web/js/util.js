@@ -21,7 +21,7 @@ const S = {
   busy: false,      // 有上传/校验任务在运行
   scanning: false, prevScan: false,
   PR: [],           // 扫描问题
-  lastLog: '', sig: {}, bcur: '', stopped: false, timer: null,
+  lastLogSource: null, lastLogOnly: null, sig: {}, bcur: '', stopped: false, timer: null,
   buckets: {}, formats: {},   // 两种数据格式各自的桶 {isuit: 'hw-upload', umi_v3: 'prt-huawei'} / 格式名（/api/state）；会话格式由目录名决定，每行 r.fmt
   loaded: false, lastFull: 0,   // 最近一次完整状态快照
   roots: [], jobID: '', jobLog: [], events: null, liveRefresh: false, sseFallbackTimer: null,
