@@ -65,15 +65,52 @@ async function fetchDatasetSnapshot() {
   const headers = {};
   if (S.datasetETag) headers['If-None-Match'] = S.datasetETag;
   const response = await fetch('/api/datasets', {headers, cache: 'no-store'});
-  if (response.status === 304) return S.D;
-  if (!response.ok) {
+  if (response.status !== 304 && !response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
   }
+  const version = response.headers.get('X-Dataset-Version');
+  if (version !== null) S.datasetVersion = Number(version) || S.datasetVersion || 0;
+  S.datasetETag = response.headers.get('ETag') || S.datasetETag || '';
+  if (response.status === 304) return S.D;
   const rows = await response.json();
   S.D = Array.isArray(rows) ? rows : [];
-  S.datasetETag = response.headers.get('ETag') || '';
   return S.D;
+}
+
+function refreshDatasetSnapshot(targetVersion) {
+  const target = Number(targetVersion || 0);
+  if (!Number.isFinite(target) || target <= (S.datasetVersion || 0)) return Promise.resolve();
+  S.datasetRefreshTarget = Math.max(S.datasetRefreshTarget || 0, target);
+  if (S.datasetRefreshPromise) return S.datasetRefreshPromise;
+
+  let fetchFailed = false;
+  const request = (async () => {
+    do {
+      try {
+        await fetchDatasetSnapshot();
+      } catch (_) {
+        // A later SSE update retries; keep the previous list visible.
+        fetchFailed = true;
+        return;
+      }
+      if (S.loaded) {
+        const have = new Set(S.D.map(row => row.id));
+        S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+        draw();
+      }
+    } while (!S.stopped && S.datasetVersion < S.datasetRefreshTarget);
+  })();
+  S.datasetRefreshPromise = request;
+  request.finally(() => {
+    if (S.datasetRefreshPromise !== request) return;
+    S.datasetRefreshPromise = null;
+    // A newer SSE version can arrive between the loop condition and cleanup.
+    if (!fetchFailed && !S.stopped && S.datasetVersion < S.datasetRefreshTarget) {
+      refreshDatasetSnapshot(S.datasetRefreshTarget).catch(() => {});
+    }
+  });
+  return request;
 }
 
 async function poll() {
@@ -141,6 +178,7 @@ function applyLiveState(s) {
     }
     return;
   }
+  if (s.dataset_version !== undefined) refreshDatasetSnapshot(s.dataset_version).catch(() => {});
   S.busy = busyNow; S.scanning = !!s.scan.running; S.prevScan = s.scan.running;
   setScanUi(s.scan, (S.roots || []).length);
   if (s.job) {
