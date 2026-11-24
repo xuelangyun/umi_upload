@@ -150,6 +150,9 @@ func TestServeEventsSendsInitialSnapshot(t *testing.T) {
 	if rec.Header().Get("X-Accel-Buffering") != "no" {
 		t.Fatal("SSE proxy buffering was not disabled")
 	}
+	if !rec.Flushed {
+		t.Fatal("initial SSE snapshot was not flushed")
+	}
 }
 
 func TestServeEventsRejectsNonGet(t *testing.T) {
