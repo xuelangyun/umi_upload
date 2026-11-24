@@ -208,7 +208,7 @@ td.vlink{color:var(--ac)}.fold{margin-left:6px;opacity:.65}.fold:hover{opacity:1
   :root{--sh:0 1px 2px rgba(0,0,0,.28),0 8px 24px rgba(0,0,0,.18)}
 }
 body{font-size:13.5px;line-height:1.5}
-button,input,select,.btn{min-height:var(--h)}
+button,input:not([type=checkbox]):not([type=radio]),select,.btn{min-height:var(--h)}
 button,.btn{font-weight:500}
 .btn.small{min-height:28px}
 .appbar{gap:18px;padding:10px 20px;min-height:56px}
@@ -452,4 +452,7 @@ button,select,.btn{touch-action:manipulation}
 @media(any-pointer:coarse){
   .btn.small{min-height:36px}
   .tabs button{height:36px;min-height:36px}
+  .check{min-height:36px}
+  .check input[type=checkbox]{width:18px;height:18px}
+  td input[type=checkbox],th input[type=checkbox]{width:18px;height:18px}
 }
