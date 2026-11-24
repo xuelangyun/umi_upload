@@ -226,7 +226,7 @@ func DeleteSetting(k string) error {
 
 // SaveDatasets replaces all rows in `datasets` inside a single transaction.
 func SaveDatasets(recs []*DatasetRecord) error {
-	invalidateDatasetRowsCache()
+	defer invalidateDatasetRowsCache()
 	db, err := OpenDB()
 	if err != nil {
 		return err
