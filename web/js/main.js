@@ -78,20 +78,22 @@ async function fetchDatasetSnapshot() {
       const body = await response.json().catch(() => ({}));
       throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
     }
-    const version = response.headers.get('X-Dataset-Version');
-    if (version !== null) {
-      const parsed = Number(version);
-      if (Number.isFinite(parsed)) S.datasetVersion = parsed;
-    }
+    const versionHeader = response.headers.get('X-Dataset-Version');
+    const parsedVersion = versionHeader === null ? NaN : Number(versionHeader);
     if (response.status === 304) {
       S.datasetETag = response.headers.get('ETag') || previousETag;
+      if (Number.isFinite(parsedVersion)) S.datasetVersion = parsedVersion;
       return {rows: S.D, contentChanged: false};
     }
+    // Commit the version only after the complete response body has been read
+    // and validated; otherwise a transient JSON/body failure can suppress retry.
     const rows = await response.json();
+    if (!Array.isArray(rows)) throw new Error('数据集响应格式无效');
     const nextETag = response.headers.get('ETag') || '';
     const contentChanged = !previousETag || !nextETag || nextETag !== previousETag;
-    S.D = Array.isArray(rows) ? rows : [];
+    S.D = rows;
     S.datasetETag = nextETag || previousETag || '';
+    if (Number.isFinite(parsedVersion)) S.datasetVersion = parsedVersion;
     return {rows: S.D, contentChanged};
   })();
   S.datasetFetchPromise = request;
