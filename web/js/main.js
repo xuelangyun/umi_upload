@@ -78,10 +78,24 @@ async function fetchDatasetSnapshot() {
   return S.D;
 }
 
+function scheduleDatasetSnapshotRetry() {
+  if (S.stopped || S.datasetRetryTimer) return;
+  const delay = Math.min(S.datasetRetryDelay || 1000, 15000);
+  S.datasetRetryDelay = Math.min(delay * 2, 15000);
+  S.datasetRetryTimer = setTimeout(() => {
+    S.datasetRetryTimer = null;
+    refreshDatasetSnapshot(S.datasetRefreshTarget).catch(() => {});
+  }, delay);
+}
+
 function refreshDatasetSnapshot(targetVersion) {
   const target = Number(targetVersion || 0);
   if (!Number.isFinite(target) || target <= (S.datasetVersion || 0)) return Promise.resolve();
   S.datasetRefreshTarget = Math.max(S.datasetRefreshTarget || 0, target);
+  if (S.datasetRetryTimer) {
+    clearTimeout(S.datasetRetryTimer);
+    S.datasetRetryTimer = null;
+  }
   if (S.datasetRefreshPromise) return S.datasetRefreshPromise;
 
   let fetchFailed = false;
@@ -89,8 +103,9 @@ function refreshDatasetSnapshot(targetVersion) {
     do {
       try {
         await fetchDatasetSnapshot();
+        S.datasetRetryDelay = 1000;
       } catch (_) {
-        // A later SSE update retries; keep the previous list visible.
+        // Retry independently of future SSE events; the old list stays visible.
         fetchFailed = true;
         return;
       }
@@ -102,17 +117,16 @@ function refreshDatasetSnapshot(targetVersion) {
     } while (!S.stopped && S.datasetVersion < S.datasetRefreshTarget);
   })();
   S.datasetRefreshPromise = request;
-  request.finally(() => {
+  const cleanup = () => {
     if (S.datasetRefreshPromise !== request) return;
     S.datasetRefreshPromise = null;
-    // A newer SSE version can arrive between the loop condition and cleanup.
-    if (!fetchFailed && !S.stopped && S.datasetVersion < S.datasetRefreshTarget) {
-      refreshDatasetSnapshot(S.datasetRefreshTarget).catch(() => {});
-    }
-  });
+    if (S.stopped || S.datasetVersion >= S.datasetRefreshTarget) return;
+    if (fetchFailed) scheduleDatasetSnapshotRetry();
+    else refreshDatasetSnapshot(S.datasetRefreshTarget).catch(() => {});
+  };
+  request.then(cleanup, cleanup);
   return request;
 }
-
 async function poll() {
   if (S.stopped) return;
   if (S.pollPromise) {
