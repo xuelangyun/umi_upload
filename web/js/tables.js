@@ -125,10 +125,13 @@ function drawDatasets(ps) {
   $('pgi').textContent = `${S.page + 1} / ${pages} 页 · 共 ${S.R.length} 条`;
   const n = datasetFilteredStats();
   $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(n.duration)}</b> · 体积 <b>${sz(n.size)}</b> <span class="muted">｜ 日期不一致 ${n.dateWarn} · 房间格式 ${n.roomBad} ·${n.umi ? ` UMI 时长&lt;3分钟 ${n.shortCal} ·` : ''}${n.isuit ? ` ISuit 错放 ${n.misplaced} ·` : ''} 设备≠SN ${n.devDiff} · 已上传 ${n.uploaded} · 已选 ${S.sel.size}</span>`;
-  const th = c => `<th class="${c[2] ? 'n' : ''}" ${c[1] ? `data-act="sort" data-k="${c[1]}"` : ''}>${c[0]}${S.sortK === c[1] ? (S.sortD > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  const th = c => {
+    const sorted = !!c[1] && S.sortK === c[1];
+    return `<th class="${c[2] ? 'n' : ''}" ${c[1] ? `data-act="sort" data-k="${c[1]}" tabindex="0"` : ''}${sorted ? ` aria-sort="${S.sortD > 0 ? 'ascending' : 'descending'}"` : ''}>${c[0]}${sorted ? (S.sortD > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  };
   const DC = DATA_COLS;
-  $('tb').innerHTML = `<thead><tr><th><input type="checkbox" id="all" title="全选当前筛选结果（含所有页）"></th>${DC.map(th).join('')}</tr></thead>` +
-    (page.length ? '<tbody>' + page.map(r => `<tr class="${S.sel.has(r.id) ? 'sel' : ''}${rowWarn(r) ? ' dw' : ''}"><td><input type="checkbox" data-id="${r.id}" ${S.sel.has(r.id) ? 'checked' : ''}></td>${DC.map(c => c[3](r)).join('')}</tr>`).join('') + '</tbody>'
+  $('tb').innerHTML = `<thead><tr><th><input type="checkbox" id="all" aria-label="全选当前筛选结果" title="全选当前筛选结果（含所有页）"></th>${DC.map(th).join('')}</tr></thead>` +
+    (page.length ? '<tbody>' + page.map(r => `<tr class="${S.sel.has(r.id) ? 'sel' : ''}${rowWarn(r) ? ' dw' : ''}"><td><input type="checkbox" data-id="${r.id}" aria-label="选择会话 ${esc(r.name)}" ${S.sel.has(r.id) ? 'checked' : ''}></td>${DC.map(c => c[3](r)).join('')}</tr>`).join('') + '</tbody>'
       : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
   const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
 }
