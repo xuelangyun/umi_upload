@@ -144,6 +144,9 @@ func TestServeEventsSendsInitialSnapshot(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
 		t.Fatalf("content type = %q, want text/event-stream", got)
 	}
+	if !strings.Contains(rec.Body.String(), "retry: 2000\n\n") {
+		t.Fatalf("SSE retry directive is not newline-delimited: %q", rec.Body.String())
+	}
 	if !strings.Contains(rec.Body.String(), "event: state\ndata: ") {
 		t.Fatalf("initial SSE state event missing: %q", rec.Body.String())
 	}
@@ -161,5 +164,28 @@ func TestServeEventsRejectsNonGet(t *testing.T) {
 	serveEvents(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestSSEStateIncludesDatasetVersion(t *testing.T) {
+	frame, err := encodeSSEState(map[string]any{
+		"scan": map[string]any{"running": false},
+		"job": nil,
+		"bandwidth": map[string]any{"current_mbps": 0.0},
+		"dataset_version": uint64(42),
+	}, nil, false)
+	if err != nil {
+		t.Fatalf("encode SSE state: %v", err)
+	}
+	lines := strings.Split(string(frame), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("invalid SSE frame: %q", frame)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &payload); err != nil {
+		t.Fatalf("decode SSE payload: %v", err)
+	}
+	if got := payload["dataset_version"]; got != float64(42) {
+		t.Fatalf("dataset_version = %#v, want 42", got)
 	}
 }
