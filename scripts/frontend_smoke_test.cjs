@@ -405,3 +405,23 @@ test("all-rows mode is wired through the table and upload-history API", () => {
   assert.ok(api.includes('ORDER BY start_time DESC, id DESC", args...)'));
   assert.ok(api.includes("LIMIT ? OFFSET ?"));
 });
+
+test("unchanged table data skips repeated DOM rebuilds", () => {
+  const context = vm.createContext({});
+  for (const relativePath of ["web/js/util.js", "web/js/filters.js", "web/js/tables.js"]) {
+    const filename = path.resolve(__dirname, "..", relativePath);
+    vm.runInContext(fs.readFileSync(filename, "utf8"), context, {filename});
+  }
+
+  const rows = [{id: "1"}, {id: "2"}];
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 0, Infinity, 0)", context), false);
+  vm.runInContext("rowsRef = " + JSON.stringify(rows), context);
+
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 0, Infinity, 0)", context), true);
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 0, Infinity, 0)", context), false);
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 1, Infinity, 0)", context), true);
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 1, 100, 0)", context), true);
+  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 1, 100, 1)", context), true);
+  assert.equal(vm.runInContext("shouldRenderTable(2, rowsRef, 1, 100, 1)", context), true);
+  assert.equal(vm.runInContext("shouldRenderTable(2, rowsRef, 1, 100, 1)", context), false);
+});
