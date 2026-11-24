@@ -59,7 +59,7 @@ async function scan() {
   if (S.scanning) return;                                // 防重复点击（服务端也有保护）
   S.scanning = true; setScanUi({running: true, stage: '提交', done: 0, total: 0, elapsed: 0}, 0);
   const r = await api('/api/scan', {city: $('city').value, room: $('room').value, full: $('fullscan').checked, pad: $('padroom').checked});
-  if (r.ok) S.sel.clear();
+  if (r.ok) clearSelection();
   poll();
 }
 
@@ -147,7 +147,7 @@ function refreshDatasetSnapshot(targetVersion) {
         S.datasetRetryDelay = 1000;
         if (snapshot.contentChanged && S.loaded && !S.pollPromise) {
           const have = new Set(S.D.map(row => row.id));
-          S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+          pruneSelection(have);
           // Dataset snapshots can change independently of a full-state poll.
           // Keep the device/date/operator query facets in sync with the new rows.
           if (S.view === 1) fillOptions();
@@ -205,7 +205,7 @@ function applyFullState(s, was) {
   S.loaded = true; S.lastFull = Date.now();
   S.D = s.datasets || []; S.PR = s.problems || []; S.roots = s.roots || [];
   S.busy = !!(s.job && !s.job.done); S.scanning = !!s.scan.running;
-  const have = new Set(S.D.map(r => r.id)); S.sel.forEach(id => have.has(id) || S.sel.delete(id));
+  const have = new Set(S.D.map(r => r.id)); pruneSelection(have);
   renderControls(s); renderBuckets(s); renderNotice(s.notice); renderRoots(S.roots);
   const nw = renderProblemsButton(); setScanUi(s.scan, S.roots.length);
   $('sinfo').title = '数据库：' + s.db;
