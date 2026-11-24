@@ -9,7 +9,14 @@ const ACT = {
   exportXlsx: () => { location.href = '/api/uploads/export?' + new URLSearchParams(S.F); },     // 用已生效的查询条件导出（浏览器下载）
   scan, run: el => run(el.dataset.a), tab: el => tab(+el.dataset.n), query, clear: clearFilters,
   page: el => { S.page = Math.max(0, S.page + +el.dataset.d); refresh(); },
-  sort: el => { S.sortK = el.dataset.k; S.sortD *= -1; draw(); },
+  sort: (el, event) => {
+    const key = el.dataset.k;
+    S.sortK = key; S.sortD *= -1; draw();
+    if (event.detail === 0) {
+      [...$('tb').querySelectorAll('th[data-act="sort"]')]
+        .find(header => header.dataset.k === key)?.focus({preventScroll: true});
+    }
+  },
   toggleLog: el => { const f = $('logbox').classList.toggle('fold'); el.textContent = f ? '展开 ▴' : '折叠 ▾'; },
   ackNotice: async () => { await api('/api/notice/ack', {}); poll(); },
 };
@@ -36,6 +43,13 @@ $('flt').addEventListener('keydown', e => {
 $('tb').addEventListener('change', onTableChange);
 $('mbody').addEventListener('change', e => { if (e.target.id === 'mvall') $('mbody').querySelectorAll('input[data-mv]:not(:disabled)').forEach(c => c.checked = e.target.checked); });
 $('tb').addEventListener('click', onTableClick);
+$('tb').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const header = e.target.closest('th[data-act="sort"]');
+  if (!header) return;
+  e.preventDefault();
+  header.click();
+});
 $('onlye').addEventListener('change', () => S.lastLog = '');
 document.querySelectorAll('[data-input=prt]').forEach(e => e.addEventListener('input', prt));
 
