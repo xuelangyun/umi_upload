@@ -3,6 +3,7 @@ package umi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -36,6 +37,22 @@ func TestSSELogDelta(t *testing.T) {
 				t.Fatalf("reset = %v, want %v", reset, tt.wantReset)
 			}
 		})
+	}
+}
+
+func TestSSELogDeltaBeyondDisplayTailRemainsIncremental(t *testing.T) {
+	previous := make([]string, sseLogLimit+20)
+	for i := range previous {
+		previous[i] = fmt.Sprintf("line-%d", i)
+	}
+	current := append(append([]string(nil), previous...), "new-line")
+
+	got, reset := sseLogDelta("job-1", previous, "job-1", current)
+	if reset {
+		t.Fatal("appending beyond the UI tail limit must remain incremental")
+	}
+	if !reflect.DeepEqual(got, []string{"new-line"}) {
+		t.Fatalf("delta = %#v, want only the appended line", got)
 	}
 }
 
