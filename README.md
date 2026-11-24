@@ -30,7 +30,7 @@
 - 保留当前经典脚本的加载顺序和共享状态边界；在未完成模块依赖拆分前，不把脚本直接改成 ES Modules。
 - 新增代码优先使用 `const`、必要时使用 `let`、模板字符串、解构和早返回。
 - JSON API 统一走 `requestJSON` / `api`，检查 HTTP 状态和 JSON 响应；长请求使用 `AbortController`，结果应用前检查请求是否仍是最新请求。
-- 自定义 Enter 快捷操作必须跳过 IME 组合输入：优先检查 `KeyboardEvent.isComposing`，并用 `compositionend` 的 `event.timeStamp` 做 50ms 边界保护；不使用已弃用的 `keyCode`，同时保留原生表单提交路径。
+- 自定义 Enter 快捷操作必须跳过 IME 组合输入：同时跟踪 `compositionstart` / `compositionend` 状态，并检查 `KeyboardEvent.isComposing`；对 Safari 的事件派发顺序差异，使用 `compositionend` 的 `event.timeStamp` 做 50ms 边界保护。不要使用已弃用的 `keyCode`，同时保留原生表单提交路径。
 - CI 对 `web/js/*.js` 执行 `node --check`，不引入额外前端构建依赖。
 - 现代 Web API 和编码建议参考 [Google Chrome Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance-src)，仅采用项目当前运行环境适合的能力。
 ### 实时状态推送
