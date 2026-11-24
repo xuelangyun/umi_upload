@@ -79,13 +79,58 @@ function showJob(j) {
 }
 
 function renderLog(lines) {
-  const lg = $('lg'), only = $('onlye').checked, txt = lines.join('\n') + only;
-  if (txt === S.lastLog) return;                       // 没变化不重绘（保持滚动位置）
-  S.lastLog = txt;
-  const atBottom = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 10;
-  lg.innerHTML = lines.filter(l => !only || /✘|错误|失败/.test(l))
-    .map(l => `<div class="${/✘|\[错误\]|失败/.test(l) ? 'e' : /✔/.test(l) ? 'o' : /▶ \[/.test(l) ? 'h' : ''}">${esc(l)}</div>`).join('');
-  if (atBottom) lg.scrollTop = 1e9;
+  const log = $('lg'), onlyErrors = $('onlye').checked;
+  const previous = S.lastLogSource || [], next = Array.isArray(lines) ? lines : [];
+  if (next === S.lastLogSource && onlyErrors === S.lastLogOnly) return;
+  const sameMode = onlyErrors === S.lastLogOnly;
+  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 10;
+  const appendLines = values => {
+    const fragment = document.createDocumentFragment();
+    for (const line of values) {
+      if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
+      const item = document.createElement('div');
+      item.className = /✘|\\[错误\\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \\[/.test(line) ? 'h' : '';
+      item.textContent = line;
+      fragment.append(item);
+    }
+    log.append(fragment);
+  };
+
+  let updatedIncrementally = false;
+  if (!onlyErrors && sameMode && previous.length) {
+    let overlap = Math.min(previous.length, next.length);
+    while (overlap > 0) {
+      const offset = previous.length - overlap;
+      let matches = true;
+      for (let i = 0; i < overlap; i++) {
+        if (previous[offset + i] !== next[i]) { matches = false; break; }
+      }
+      if (matches) break;
+      overlap--;
+    }
+    if (overlap > 0) {
+      const removeCount = previous.length - overlap;
+      for (let i = 0; i < removeCount && log.firstElementChild; i++) log.firstElementChild.remove();
+      appendLines(next.slice(overlap));
+      updatedIncrementally = true;
+    }
+  }
+
+  if (!updatedIncrementally) {
+    const fragment = document.createDocumentFragment();
+    for (const line of next) {
+      if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
+      const item = document.createElement('div');
+      item.className = /✘|\\[错误\\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \\[/.test(line) ? 'h' : '';
+      item.textContent = line;
+      fragment.append(item);
+    }
+    log.replaceChildren(fragment);
+  }
+
+  S.lastLogSource = next;
+  S.lastLogOnly = onlyErrors;
+  if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
 
