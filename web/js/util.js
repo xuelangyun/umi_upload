@@ -16,7 +16,8 @@ const S = {
   F: {},            // 已生效的过滤条件（点「查询」才更新）
   view: 1,          // 1 数据列表 / 2 上传记录
   sel: new Set(),   // 勾选的数据集 id
-  sortK: 'start', sortD: -1, page: 0,
+  selectionVersion: 0, tableRenderState: null,
+  sortK: 'start', sortD: -1,
   R: [],            // 数据列表当前过滤+排序后的全部行（含所有页）
   busy: false,      // 有上传/校验任务在运行
   scanning: false, prevScan: false,
