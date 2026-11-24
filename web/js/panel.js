@@ -89,7 +89,7 @@ function renderLog(lines) {
     for (const line of values) {
       if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
       const item = document.createElement('div');
-      item.className = /✘|\\[错误\\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \\[/.test(line) ? 'h' : '';
+      item.className = /✘|\[错误\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \[/.test(line) ? 'h' : '';
       item.textContent = line;
       fragment.append(item);
     }
@@ -121,7 +121,7 @@ function renderLog(lines) {
     for (const line of next) {
       if (onlyErrors && !/✘|错误|失败/.test(line)) continue;
       const item = document.createElement('div');
-      item.className = /✘|\\[错误\\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \\[/.test(line) ? 'h' : '';
+      item.className = /✘|\[错误\]|失败/.test(line) ? 'e' : /✔/.test(line) ? 'o' : /▶ \[/.test(line) ? 'h' : '';
       item.textContent = line;
       fragment.append(item);
     }
