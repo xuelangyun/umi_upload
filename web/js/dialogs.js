@@ -307,7 +307,7 @@ async function doMove() {
   $('mgo').disabled = true;
   const r = await api('/api/move', S.moveTo ? {ids, to: S.moveTo} : {ids});
   if (!r.moved) { $('mgo').disabled = false; return; }
-  r.moved.forEach(m => S.sel.delete(m.id));
+  r.moved.forEach(m => setRowSelected(m.id, false));
   S.MV = S.MV.filter(p => !r.moved.some(m => m.id === p.id));
   toast(`已移动 ${r.moved.length} 个` + (r.failed.length ? `，${r.failed.length} 个失败` : '') + (r.moved.some(m => m.rescan) ? '（部分需重新扫描）' : ''));
   await poll(); renderMove(r);
