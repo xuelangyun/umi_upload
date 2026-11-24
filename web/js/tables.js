@@ -69,17 +69,23 @@ function draw() {
 
 /* 格式分组按钮（全部 / ISuit-V3 / UMI_v3）：数据列表带各格式的会话数 */
 function renderFmtSeg() {
-  const c = {'': S.D.length, isuit: S.D.filter(r => !isUmi(r)).length, umi_v3: S.D.filter(isUmi).length}, f = S.F.fmt || '';
-  $('fmtSeg').innerHTML = [['', '全部'], ['isuit', S.formats.isuit || 'ISuit-V3'], ['umi_v3', S.formats.umi_v3 || 'UMI_v3']].map(([v, t]) =>
+  const {stats} = datasetOverview(), c = {'': stats.total, isuit: stats.isuit, umi_v3: stats.umi_v3}, f = S.F.fmt || '';
+  const html = [['', '全部'], ['isuit', S.formats.isuit || 'ISuit-V3'], ['umi_v3', S.formats.umi_v3 || 'UMI_v3']].map(([v, t]) =>
     `<button data-act="setFmt" data-v="${v}" class="${f === v ? 'on' : ''}" title="${v ? `只看 ${t}（上传到桶 ${esc(S.buckets[v] || '')}）` : '两种格式一起显示'}">${t}${S.view === 1 ? ` <small>${c[v]}</small>` : ''}</button>`).join('');
+  const el = $('fmtSeg'); if (el.innerHTML !== html) el.innerHTML = html;
 }
 
 /* 标定整理按钮（两种格式各有各的方式）：ISuit-V3 自动判定错放（N=被判定为标定的常规会话）；UMI_v3 手动：移动勾选的会话（先点会话名看视频） */
 function renderMoveBtns() {
-  const f = S.F.fmt || '', hasI = S.D.some(r => !isUmi(r)) && f !== 'umi_v3', hasU = S.D.some(isUmi) && f !== 'isuit', ns = S.D.filter(r => S.sel.has(r.id));
-  const nAuto = S.D.filter(movable).length, uN = ns.filter(r => isUmi(r) && r.type === 'normal').length, uC = ns.filter(r => isUmi(r) && r.type === 'calibration').length;
+  const {stats, byId} = datasetOverview(), f = S.F.fmt || '';
+  const hasI = stats.isuit > 0 && f !== 'umi_v3', hasU = stats.umi_v3 > 0 && f !== 'isuit';
+  let uN = 0, uC = 0;
+  for (const id of S.sel) {
+    const r = byId.get(id);
+    if (r && isUmi(r)) { if (r.type === 'normal') uN++; else if (r.type === 'calibration') uC++; }
+  }
   $('mvGrp').hidden = S.view !== 1 || !(hasI || hasU); $('mvBtn').hidden = !hasI; $('umvBtn').hidden = !hasU; $('mvBackBtn').hidden = !hasU;
-  $('mvBtn').textContent = 'ISuit 自动' + (nAuto ? ` (${nAuto})` : ''); $('umvBtn').textContent = 'UMI 移到标定' + (uN ? ` (${uN})` : ''); $('mvBackBtn').textContent = 'UMI 移回常规' + (uC ? ` (${uC})` : '');
+  $('mvBtn').textContent = 'ISuit 自动' + (stats.misplaced ? ` (${stats.misplaced})` : ''); $('umvBtn').textContent = 'UMI 移到标定' + (uN ? ` (${uN})` : ''); $('mvBackBtn').textContent = 'UMI 移回常规' + (uC ? ` (${uC})` : '');
 }
 
 function drawRecords(ps) {
@@ -94,13 +100,31 @@ function drawRecords(ps) {
     }).join('') + '</tbody>' : emptyRow(RC.length, '没有符合条件的上传记录'));
 }
 
+function datasetFilteredStats() {
+  const key = S.datasetViewCache?.key || '';
+  if (S.datasetFilteredStatsCache?.key === key) return S.datasetFilteredStatsCache.value;
+  const value = {duration: 0, size: 0, dateWarn: 0, roomBad: 0, umi: 0, shortCal: 0, isuit: 0, misplaced: 0, devDiff: 0, uploaded: 0};
+  for (const r of S.R) {
+    value.duration += r.duration || 0;
+    value.size += r.size || 0;
+    if (r.date_warn) value.dateWarn++;
+    if (r.room_bad) value.roomBad++;
+    if (isUmi(r)) { value.umi++; if (shortCal(r)) value.shortCal++; }
+    else { value.isuit++; if (r.misplaced) value.misplaced++; }
+    if (r.dev_diff) value.devDiff++;
+    if (r.up_state === '已上传') value.uploaded++;
+  }
+  S.datasetFilteredStatsCache = {key, value};
+  return value;
+}
+
 function drawDatasets(ps) {
   S.R = rows();
   const pages = Math.max(1, Math.ceil(S.R.length / ps)); S.page = Math.min(S.page, pages - 1);
   const page = S.R.slice(S.page * ps, (S.page + 1) * ps);
   $('pgi').textContent = `${S.page + 1} / ${pages} 页 · 共 ${S.R.length} 条`;
-  const tot = S.R.reduce((a, r) => [a[0] + (r.duration || 0), a[1] + (r.size || 0)], [0, 0]);
-  $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(tot[0])}</b> · 体积 <b>${sz(tot[1])}</b> <span class="muted">｜ 日期不一致 ${S.R.filter(r => r.date_warn).length} · 房间格式 ${S.R.filter(r => r.room_bad).length} ·${S.R.some(isUmi) ? ` UMI 时长&lt;3分钟 ${S.R.filter(shortCal).length} ·` : ''}${S.R.some(r => !isUmi(r)) ? ` ISuit 错放 ${S.R.filter(r => r.misplaced).length} ·` : ''} 设备≠SN ${S.R.filter(r => r.dev_diff).length} · 已上传 ${S.R.filter(r => r.up_state === '已上传').length} · 已选 ${S.sel.size}</span>`;
+  const n = datasetFilteredStats();
+  $('cards').innerHTML = `查询结果：<b>${S.R.length}</b> 个会话 · 累计采集时长 <b>${hms(n.duration)}</b> · 体积 <b>${sz(n.size)}</b> <span class="muted">｜ 日期不一致 ${n.dateWarn} · 房间格式 ${n.roomBad} ·${n.umi ? ` UMI 时长&lt;3分钟 ${n.shortCal} ·` : ''}${n.isuit ? ` ISuit 错放 ${n.misplaced} ·` : ''} 设备≠SN ${n.devDiff} · 已上传 ${n.uploaded} · 已选 ${S.sel.size}</span>`;
   const th = c => `<th class="${c[2] ? 'n' : ''}" ${c[1] ? `data-act="sort" data-k="${c[1]}"` : ''}>${c[0]}${S.sortK === c[1] ? (S.sortD > 0 ? ' ▲' : ' ▼') : ''}</th>`;
   const DC = DATA_COLS;
   $('tb').innerHTML = `<thead><tr><th><input type="checkbox" id="all" title="全选当前筛选结果（含所有页）"></th>${DC.map(th).join('')}</tr></thead>` +
@@ -108,7 +132,6 @@ function drawDatasets(ps) {
       : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
   const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
 }
-
 /* 勾选：表头复选框 = 全选当前筛选结果（含所有页） */
 function onTableChange(e) {
   const t = e.target;
