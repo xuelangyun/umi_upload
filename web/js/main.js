@@ -117,9 +117,19 @@ function applyLiveState(s) {
   if (s.bandwidth) renderBandwidth(s.bandwidth);
 }
 
+async function pollFallback() {
+  try {
+    await poll();
+    const r = await fetch('/api/bandwidth', {cache: 'no-store'});
+    if (r.ok) renderBandwidth(await r.json());
+  } catch (_) {
+    // Keep the last visible state; the next fallback cycle retries.
+  }
+}
+
 function connectEvents() {
   if (typeof EventSource === 'undefined') {
-    const fallback = () => { if (!S.stopped) poll().catch(() => {}).finally(() => { S.timer = setTimeout(fallback, 1200); }); };
+    const fallback = () => { if (!S.stopped) pollFallback().finally(() => { S.timer = setTimeout(fallback, 1200); }); };
     fallback();
     return;
   }
@@ -140,7 +150,7 @@ function connectEvents() {
     if (source.readyState === EventSource.CLOSED && !S.sseFallbackTimer) {
       const fallback = () => {
         if (S.stopped || source.readyState !== EventSource.CLOSED) { S.sseFallbackTimer = null; return; }
-        poll().catch(() => {}).finally(() => { S.sseFallbackTimer = setTimeout(fallback, 2000); });
+        pollFallback().finally(() => { S.sseFallbackTimer = setTimeout(fallback, 2000); });
       };
       S.sseFallbackTimer = setTimeout(fallback, 0);
     }
