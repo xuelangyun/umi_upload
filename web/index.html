@@ -18,7 +18,7 @@
   <span class="grow"></span>
   <div class="ctls">
     <div class="ctl" title="基于阿里云 OSS Go SDK 上传：逐文件夹（上个文件夹传完再传下一个）；逐分片（每个文件夹传完即核对远端列表，后台提前算哈希）；流水线（整会话连续上传，无文件夹间空档，带宽利用最高）"><label>顺序</label>
-      <div class="seg"><button data-act="cfg" data-k="order" data-v="folder">逐文件夹</button><button data-act="cfg" data-k="order" data-v="slice">逐分片</button><button data-act="cfg" data-k="order" data-v="pipeline">流水线</button></div></div>
+      <div class="seg" role="group" aria-label="上传顺序"><button data-act="cfg" data-k="order" data-v="folder">逐文件夹</button><button data-act="cfg" data-k="order" data-v="slice">逐分片</button><button data-act="cfg" data-k="order" data-v="pipeline">流水线</button></div></div>
     <span class="vsep"></span>
     <a class="btn icon" href="/api/export" title="导出上传记录（官方客户端 upload-history 格式）"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>导出</a>
     <button class="btn icon" data-act="openConfig" title="OSS / 并发配置"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10l2 2M19 5l-2 2M7 17l-2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>配置</button>
@@ -35,8 +35,8 @@
     <div class="bk" id="bkInfo" title="两种数据格式各自上传到的桶（目录名决定格式，格式决定桶）。在「配置」里修改"></div>
     <div class="row">
       <button class="btn" id="addBtn" data-act="openBrowse">＋ 添加目录</button>
-      <input id="city" class="w58" placeholder="城市" title="可选：城市缩写，如 xz（自动大写）。城市和房间都填才会覆盖本地目录里的 PRT；都留空 = OSS 路径跟随本地文件夹名" data-input="prt">
-      <input id="room" class="w58" placeholder="房间" title="可选：房间号，如 001。都留空 = OSS 路径跟随本地文件夹名（改名后重新扫描即生效）" data-input="prt">
+      <input id="city" aria-label="城市缩写" class="w58" placeholder="城市" title="可选：城市缩写，如 xz（自动大写）。城市和房间都填才会覆盖本地目录里的 PRT；都留空 = OSS 路径跟随本地文件夹名" data-input="prt">
+      <input id="room" aria-label="房间号" class="w58" placeholder="房间" title="可选：房间号，如 001。都留空 = OSS 路径跟随本地文件夹名（改名后重新扫描即生效）" data-input="prt">
       <span class="grow"></span>
       <label class="check" title="忽略缓存，重新统计每个会话。默认只重新统计有变化的会话，重复扫描很快"><input type="checkbox" id="fullscan"> 完整</label>
       <label class="check" title="OSS 路径里的房间号补零成 3 位（PRT_WX_room2 → PRT_WX_room002），不改动本地文件夹"><input type="checkbox" id="padroom"> 补零</label>
@@ -69,7 +69,7 @@
 </section>
 
 <div class="toolbar">
-  <div class="tabs"><button id="t1" class="on" data-act="tab" data-n="1">数据列表</button><button id="t2" data-act="tab" data-n="2">上传记录</button></div>
+  <div class="tabs" role="group" aria-label="页面视图"><button id="t1" class="on" data-act="tab" data-n="1">数据列表</button><button id="t2" data-act="tab" data-n="2">上传记录</button></div>
   <div class="seg fmtseg" id="fmtSeg" title="按数据格式筛选：ISuit-V3 与 UMI_v3 可以同时加载，各自有自己的标定整理方式，上传到各自的桶"></div>
   <span class="grow"></span>
   <label class="check"><input type="checkbox" id="force"> 含已上传</label>
@@ -83,16 +83,16 @@
 </div>
 
 <div class="filters-wrap"><div class="filters" id="flt">
-  <select id="ft"><option value="">全部类型</option><option value="normal">常规</option><option value="calibration">标定</option></select>
-  <select id="fs"></select><select id="fd"></select><select id="fe" title="采集日期（session 目录名里的日期）"></select><select id="fo"></select>
-  <input id="fk" placeholder="任务名"><input id="fc" placeholder="地点">
-  <input id="q" placeholder="关键字（会话目录/本地路径/任务/人员/地点/设备/SN；空格分隔多个词）">
+  <select id="ft" aria-label="数据类型筛选"><option value="">全部类型</option><option value="normal">常规</option><option value="calibration">标定</option></select>
+  <select id="fs" aria-label="状态筛选"></select><select id="fd" aria-label="设备筛选"></select><select id="fe" aria-label="采集日期筛选" title="采集日期（session 目录名里的日期）"></select><select id="fo" aria-label="人员筛选"></select>
+  <input id="fk" aria-label="任务名筛选" placeholder="任务名"><input id="fc" aria-label="地点筛选" placeholder="地点">
+  <input id="q" aria-label="关键字筛选" placeholder="关键字（会话目录/本地路径/任务/人员/地点/设备/SN；空格分隔多个词）">
   <button class="btn primary" data-act="query">查询</button><button class="btn" data-act="clear">清除</button>
 </div></div>
 
 <div class="summary"><div id="cards" class="summary-text"></div><button class="btn small" id="xlsBtn" data-act="exportXlsx" hidden title="按当前查询条件导出上传记录为 Excel（含汇总、按设备、按人员）">导出 Excel</button><button class="btn small" data-act="openGroups" title="按设备 / 按人员 查看累计采集时长">明细</button>
-  <div class="pager"><button class="btn small" data-act="page" data-d="-1">‹</button><span id="pgi" class="muted"></span><button class="btn small" data-act="page" data-d="1">›</button>
-    <select id="ps" data-change="pagesize" class="narrow"><option>50</option><option selected>100</option><option>200</option><option>500</option></select><span class="muted">条/页</span></div></div>
+  <div class="pager"><button class="btn small" aria-label="上一页" data-act="page" data-d="-1">‹</button><span id="pgi" class="muted"></span><button class="btn small" aria-label="下一页" data-act="page" data-d="1">›</button>
+    <select id="ps" aria-label="每页条数" data-change="pagesize" class="narrow"><option>50</option><option selected>100</option><option>200</option><option>500</option></select><span class="muted">条/页</span></div></div>
 
 <div class="table-wrap" id="wr"><table id="tb"></table></div>
 
@@ -118,7 +118,7 @@
 
 <div class="modal" id="vm"><div class="dlg wide xl vdlg"><h3 id="vtitle">视频预览</h3>
   <div class="muted" id="vinfo"></div>
-  <div class="vbar"><select id="vsel" title="选择相机视频"></select><label class="vlab">倍速<select id="vrate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option></select></label>
+  <div class="vbar"><select id="vsel" aria-label="选择相机视频" title="选择相机视频"></select><label class="vlab">倍速<select id="vrate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option></select></label>
     <button class="btn small" data-act="stepVideo" data-d="-1" title="列表里的上一个会话">◀ 上一个</button><button class="btn small" data-act="stepVideo" data-d="1" title="列表里的下一个会话">下一个 ▶</button></div>
   <video id="vplayer" controls preload="metadata"></video>
   <div class="muted" id="vdur"></div><div class="e-text" id="verr"></div>
@@ -133,43 +133,43 @@
   <div class="config-head"><div><h3>存储与并发配置</h3><div class="muted">修改后立即生效；运行中的上传不会被中断。</div></div></div>
   <section class="cfg-profile">
     <h4 class="sec">配置方案</h4>
-    <div class="cfg-profile-row"><select id="c_profile_select"></select><button class="btn" data-act="switchConfigProfile">切换</button><button class="btn" data-act="deleteConfigProfile">删除</button></div>
-    <div class="cfg-profile-row"><input id="c_profile_name" placeholder="新配置名称"><button class="btn" data-act="saveConfigAsProfile">另存为并切换</button></div>
+    <div class="cfg-profile-row"><select id="c_profile_select" aria-label="配置方案"></select><button class="btn" data-act="switchConfigProfile">切换</button><button class="btn" data-act="deleteConfigProfile">删除</button></div>
+    <div class="cfg-profile-row"><input id="c_profile_name" aria-label="新配置名称" placeholder="新配置名称"><button class="btn" data-act="saveConfigAsProfile">另存为并切换</button></div>
   </section>
   <div class="cfg-grid">
     <section class="cfg-section">
       <h4 class="sec">存储连接</h4>
-      <label>存储类型</label><select id="c_storage_type"><option value="aliyun">阿里云 OSS（官方 Go SDK v2）</option><option value="s3">MinIO / S3（AWS Signature V4）</option></select>
-      <label>Endpoint</label><input id="c_endpoint">
-      <div class="cfg-two"><div><label>Access Key ID</label><input id="c_ak"></div><div><label>Access Key Secret</label><input id="c_sk" type="password"></div></div>
-      <label>ISuit-V3 桶</label><input id="c_bucket" spellcheck="false" autocomplete="off">
-      <label>UMI_v3 桶</label><input id="c_bucket_umi" spellcheck="false" autocomplete="off">
+      <label for="c_storage_type">存储类型</label><select id="c_storage_type"><option value="aliyun">阿里云 OSS（官方 Go SDK v2）</option><option value="s3">MinIO / S3（AWS Signature V4）</option></select>
+      <label for="c_endpoint">Endpoint</label><input id="c_endpoint">
+      <div class="cfg-two"><div><label for="c_ak">Access Key ID</label><input id="c_ak"></div><div><label for="c_sk">Access Key Secret</label><input id="c_sk" type="password"></div></div>
+      <label for="c_bucket">ISuit-V3 桶</label><input id="c_bucket" spellcheck="false" autocomplete="off">
+      <label for="c_bucket_umi">UMI_v3 桶</label><input id="c_bucket_umi" spellcheck="false" autocomplete="off">
       <div class="muted cfg-hint">按数据目录格式自动选择对应桶。</div>
     </section>
     <section class="cfg-section">
       <h4 class="sec">上传并发</h4>
       <div class="cfg-three">
-        <div><label>数据集并发</label><input id="c_ds_jobs" type="number" min="1"></div>
-        <div><label>文件并发</label><input id="c_jobs" type="number" min="1"></div>
-        <div><label>分片并发</label><input id="c_parallel" type="number" min="1"></div>
+        <div><label for="c_ds_jobs">数据集并发</label><input id="c_ds_jobs" type="number" min="1"></div>
+        <div><label for="c_jobs">文件并发</label><input id="c_jobs" type="number" min="1"></div>
+        <div><label for="c_parallel">分片并发</label><input id="c_parallel" type="number" min="1"></div>
       </div>
-      <label>网络出口数（WAN）</label><div class="cfg-inline"><input id="c_wan" type="number" min="1" max="16"><button class="btn" data-act="applyNet">套用建议</button></div>
+      <label for="c_wan">网络出口数（WAN）</label><div class="cfg-inline"><input id="c_wan" type="number" min="1" max="16"><button class="btn" data-act="applyNet">套用建议</button></div>
       <div class="muted cfg-hint" id="c_net"></div>
     </section>
     <section class="cfg-section cfg-bandwidth">
       <h4 class="sec">动态带宽调优</h4>
-      <label>目标总上传带宽（Mbps，0 = 自动探索最大吞吐）</label><input id="c_target_mbps" type="number" min="0" max="100000" step="10">
+      <label for="c_target_mbps">目标总上传带宽（Mbps，0 = 自动探索最大吞吐）</label><input id="c_target_mbps" type="number" min="0" max="100000" step="10">
       <div class="cfg-two">
-        <div><label>自动调优</label><select id="c_auto_tune"><option value="true">开启</option><option value="false">关闭（手动并发）</option></select></div>
-        <div><label>最大文件并发</label><input id="c_max_jobs" type="number" min="1" max="512"></div>
+        <div><label for="c_auto_tune">自动调优</label><select id="c_auto_tune"><option value="true">开启</option><option value="false">关闭（手动并发）</option></select></div>
+        <div><label for="c_max_jobs">最大文件并发</label><input id="c_max_jobs" type="number" min="1" max="512"></div>
       </div>
-      <label>最大分片并发</label><input id="c_max_parallel" type="number" min="1" max="64">
+      <label for="c_max_parallel">最大分片并发</label><input id="c_max_parallel" type="number" min="1" max="64">
       <div class="muted cfg-hint">自动调优仅在带宽低于目标且并发饱和时逐步增加；文件并发即时调整，分片并发对后续对象生效。</div>
       <div class="muted cfg-hint" id="c_bandwidth_status"></div>
     </section>
     <section class="cfg-section cfg-retry">
       <h4 class="sec">断网重试</h4>
-      <label>断网自动等待（分钟，0 = 不等待）</label><input id="c_net_wait" type="number" min="0">
+      <label for="c_net_wait">断网自动等待（分钟，0 = 不等待）</label><input id="c_net_wait" type="number" min="0">
       <div class="muted cfg-hint">网络恢复后继续当前文件/操作；已完成文件会跳过。</div>
     </section>
   </div>
