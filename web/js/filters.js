@@ -103,7 +103,7 @@ function rows() {
   if (S.datasetViewCache?.key === sortKey) return S.datasetViewCache.rows;
 
   const task = lcs(f.task), location = lcs(f.location);
-  const words = lcs(f.q).replace(/\\\\/g, '/').split(/\\s+/).filter(Boolean);
+  const words = lcs(f.q).replace(/\\/g, '/').split(/\s+/).filter(Boolean);
   const result = [];
   for (const row of S.D) {
     if (f.fmt && row.fmt !== f.fmt) continue;
@@ -115,7 +115,7 @@ function rows() {
     if (location && !lcs(row.location).includes(location)) continue;
     if (f.status && !(f.status === 'mis' ? row.misplaced : f.status === 'warn' ? hasWarn(row) : row.up_state === f.status)) continue;
     if (words.length) {
-      const searchable = lcs([row.name, row.source, row.task, row.sub_task, row.operator, row.rel, row.location, row.device, row.device_sn].join(' ')).replace(/\\\\/g, '/');
+      const searchable = lcs([row.name, row.source, row.task, row.sub_task, row.operator, row.rel, row.location, row.device, row.device_sn].join(' ')).replace(/\\/g, '/');
       if (!words.every(word => searchable.includes(word))) continue;
     }
     result.push(row);
