@@ -122,8 +122,11 @@ func TestSSEHubDisconnectsSlowSubscriber(t *testing.T) {
 	if _, exists := h.clients[sub]; exists {
 		t.Fatal("slow subscriber was not removed")
 	}
+	if queued, open := <-sub.events; !open || string(queued) != "queued" {
+		t.Fatalf("queued event = %q, open = %v", queued, open)
+	}
 	if _, open := <-sub.events; open {
-		t.Fatal("slow subscriber channel was not closed")
+		t.Fatal("slow subscriber channel was not closed after draining its queue")
 	}
 }
 
