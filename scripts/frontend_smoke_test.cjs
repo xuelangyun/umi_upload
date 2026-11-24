@@ -204,13 +204,14 @@ test("data table sorting and selection controls are keyboard and screen-reader a
   const tables = fs.readFileSync(path.resolve(__dirname, "..", "web/js/tables.js"), "utf8");
   const main = fs.readFileSync(path.resolve(__dirname, "..", "web/js/main.js"), "utf8");
 
-  assert.match(tables, /data-act="sort" data-k="\$\{c\[1\]\}" tabindex="0"/);
-  assert.match(tables, /aria-sort="\$\{S\.sortD > 0 \? 'ascending' : 'descending'\}"/);
+  assert.match(tables, /<caption class="sr-only">数据集列表。可排序列可通过列标题按钮排序；再次操作可切换排序方向。<\\/caption>/);
+  assert.match(tables, /<button type="button" class="th-sort" data-act="sort" data-k="\\$\\{c\\[1\\]\\}" aria-label="按\\$\\{esc\\(c\\[0\\]\\)\\}排序">/);
+  assert.match(tables, /aria-sort="\\$\\{direction\\}"/);
+  assert.match(tables, /<span aria-hidden="true">\\$\\{sorted \\?/);
   assert.match(tables, /aria-label="全选当前筛选结果"/);
-  assert.match(tables, /aria-label="选择会话 \$\{esc\(r\.name\)\}"/);
+  assert.match(tables, /aria-label="选择会话 \\$\\{esc\\(r\\.name\\)\\}"/);
 
-  assert.match(main, /\$\('tb'\)\.addEventListener\('keydown', e =>/);
-  assert.match(main, /e\.key !== 'Enter' && e\.key !== ' '/);
-  assert.match(main, /e\.preventDefault\(\);\s*header\.click\(\);/);
-  assert.match(main, /header => header\.dataset\.k === key\)\?\.focus\(\{preventScroll: true\}\)/);
-});
+  assert.match(main, /button\\.th-sort/);
+  assert.match(main, /event\\.detail === 0/);
+  assert.doesNotMatch(main, /\\$\\('tb'\\)\\.addEventListener\\('keydown'/);
+});\n
