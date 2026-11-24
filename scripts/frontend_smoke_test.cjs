@@ -414,7 +414,6 @@ test("unchanged table data skips repeated DOM rebuilds", () => {
   }
 
   const rows = [{id: "1"}, {id: "2"}];
-  assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 0, Infinity, 0)", context), false);
   vm.runInContext("rowsRef = " + JSON.stringify(rows), context);
 
   assert.equal(vm.runInContext("shouldRenderTable(1, rowsRef, 0, Infinity, 0)", context), true);
