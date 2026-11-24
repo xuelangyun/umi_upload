@@ -23,6 +23,7 @@ const S = {
   pollPromise: null, pollAgain: false, datasetETag: '', datasetVersion: 0,
   datasetRefreshTarget: 0, datasetRefreshPromise: null,
   datasetRetryTimer: null, datasetRetryDelay: 1000,
+  datasetFetchPromise: null, datasetViewCache: null, datasetOverviewCache: null, datasetFilteredStatsCache: null,
 };
 
 /* 状态文字 → 样式类（tag 颜色） */
