@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -56,7 +55,7 @@ func liveStateSnapshot() (map[string]any, string, []string) {
 		jobID = current.ID
 		action = current.Action
 		done = current.Done
-		logs = tailLog(current.Log)
+		logs = append([]string(nil), current.Log...)
 	}
 	PL.Unlock()
 
@@ -297,5 +296,3 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Keep fmt linked to this package for stable event debugging format helpers.
-var _ = fmt.Sprintf
