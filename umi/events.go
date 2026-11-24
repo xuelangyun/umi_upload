@@ -293,3 +293,13 @@ func serveEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// liveHTTPStateSnapshot adds the bounded log tail needed by HTTP fallback.
+// It excludes metadata and the potentially large dataset list.
+func liveHTTPStateSnapshot() map[string]any {
+	state, _, logs := liveStateSnapshot()
+	if job, ok := state["job"].(map[string]any); ok {
+		job["log"] = tailLog(logs)
+	}
+	return state
+}
