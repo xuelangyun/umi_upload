@@ -397,10 +397,10 @@ test("all-rows mode is wired through the table and upload-history API", () => {
   const tables = fs.readFileSync(path.resolve(__dirname, "..", "web/js/tables.js"), "utf8");
   const api = fs.readFileSync(path.resolve(__dirname, "..", "umi/api.go"), "utf8");
 
-  assert.match(html, /<option value="all" selected>全部<\\/option>/);
-  assert.match(tables, /Number\\.isFinite\\(ps\\) \\? S\\.R\\.slice\\(S\\.page \\* ps, \\(S\\.page \\+ 1\\) \\* ps\\) : S\\.R/);
-  assert.match(tables, /button\\.hidden = !Number\\.isFinite\\(ps\\)/);
-  assert.match(api, /allRows := q\\.Get\\("ps"\\) == "all"/);
-  assert.match(api, /ORDER BY start_time DESC, id DESC", args\\.\\.\\.\\)/);
-  assert.match(api, /LIMIT \\? OFFSET \\?/);
+  assert.ok(html.includes('<option value="all" selected>全部</option>'));
+  assert.ok(tables.includes("Number.isFinite(ps) ? S.R.slice(S.page * ps, (S.page + 1) * ps) : S.R"));
+  assert.ok(tables.includes("button.hidden = !Number.isFinite(ps)"));
+  assert.ok(api.includes('allRows := q.Get("ps") == "all"'));
+  assert.ok(api.includes('ORDER BY start_time DESC, id DESC", args...)'));
+  assert.ok(api.includes("LIMIT ? OFFSET ?"));
 });
