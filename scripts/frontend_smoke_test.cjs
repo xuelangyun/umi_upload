@@ -176,7 +176,7 @@ test("modal dialogs expose names and manage keyboard focus", () => {
     querySelectorAll: () => [modal],
   };
   activeElement = trigger;
-  context = vm.createContext({document, $: () => modal});
+  context = vm.createContext({document, $: id => id === "test" ? modal : {addEventListener() {}}});
   vm.runInContext(dialogs, context, {filename: "web/js/dialogs.js"});
 
   context.openModal("test");
