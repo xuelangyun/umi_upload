@@ -88,13 +88,10 @@ function renderFmtSeg() {
 
 /* 标定整理按钮（两种格式各有各的方式）：ISuit-V3 自动判定错放（N=被判定为标定的常规会话）；UMI_v3 手动：移动勾选的会话（先点会话名看视频） */
 function renderMoveBtns() {
-  const {stats, byId} = datasetOverview(), f = S.F.fmt || '';
+  const {stats} = datasetOverview(), f = S.F.fmt || '';
+  const selected = getSelectionStats();
   const hasI = stats.isuit > 0 && f !== 'umi_v3', hasU = stats.umi_v3 > 0 && f !== 'isuit';
-  let uN = 0, uC = 0;
-  for (const id of S.sel) {
-    const r = byId.get(id);
-    if (r && isUmi(r)) { if (r.type === 'normal') uN++; else if (r.type === 'calibration') uC++; }
-  }
+  const uN = selected.umiNormal, uC = selected.umiCalibration;
   $('mvGrp').hidden = S.view !== 1 || !(hasI || hasU); $('mvBtn').hidden = !hasI; $('umvBtn').hidden = !hasU; $('mvBackBtn').hidden = !hasU;
   $('mvBtn').textContent = 'ISuit 自动' + (stats.misplaced ? ` (${stats.misplaced})` : ''); $('umvBtn').textContent = 'UMI 移到标定' + (uN ? ` (${uN})` : ''); $('mvBackBtn').textContent = 'UMI 移回常规' + (uC ? ` (${uC})` : '');
 }
@@ -152,6 +149,44 @@ function drawDatasets(ps) {
       : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
   const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
 }
+function getSelectionStats() {
+  if (S.selectionStats) return S.selectionStats;
+  const stats = {umiNormal: 0, umiCalibration: 0};
+  const {byId} = datasetOverview();
+  for (const id of S.sel) {
+    const row = byId.get(id);
+    if (!row || !isUmi(row)) continue;
+    if (row.type === 'normal') stats.umiNormal++;
+    else if (row.type === 'calibration') stats.umiCalibration++;
+  }
+  S.selectionStats = stats;
+  return stats;
+}
+
+function setRowSelected(id, selected) {
+  const exists = S.sel.has(id);
+  if (exists === selected) return;
+  const row = datasetOverview().byId.get(id);
+  const stats = getSelectionStats();
+  if (row && isUmi(row)) {
+    if (row.type === 'normal') stats.umiNormal += selected ? 1 : -1;
+    else if (row.type === 'calibration') stats.umiCalibration += selected ? 1 : -1;
+  }
+  if (selected) S.sel.add(id);
+  else S.sel.delete(id);
+}
+
+function clearSelection() {
+  S.sel.clear();
+  S.selectionStats = {umiNormal: 0, umiCalibration: 0};
+}
+
+function pruneSelection(validIds) {
+  for (const id of S.sel) {
+    if (!validIds.has(id)) setRowSelected(id, false);
+  }
+}
+
 function updateSelectionUI() {
   const label = '上传选中' + (S.sel.size ? ` (${S.sel.size})` : '');
   const button = $('bup');
@@ -168,7 +203,7 @@ function onTableChange(e) {
   const t = e.target;
   if (t.id === 'all') {
     const selected = t.checked;
-    S.R.forEach(row => selected ? S.sel.add(row.id) : S.sel.delete(row.id));
+    S.R.forEach(row => setRowSelected(row.id, selected));
     $('tb').querySelectorAll('tbody input[data-id]').forEach(input => {
       input.checked = selected;
       input.closest('tr').classList.toggle('sel', selected);
@@ -178,7 +213,7 @@ function onTableChange(e) {
     return;
   }
   if (t.dataset.id) {
-    t.checked ? S.sel.add(t.dataset.id) : S.sel.delete(t.dataset.id);
+    setRowSelected(t.dataset.id, t.checked);
     t.closest('tr').classList.toggle('sel', t.checked);
     updateSelectionUI();
     renderMoveBtns();
