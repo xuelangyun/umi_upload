@@ -71,8 +71,9 @@ async function fetchDatasetSnapshot() {
     throw new Error(body.error || '读取数据集失败：HTTP ' + response.status);
   }
   const rows = await response.json();
+  S.D = Array.isArray(rows) ? rows : [];
   S.datasetETag = response.headers.get('ETag') || '';
-  return Array.isArray(rows) ? rows : [];
+  return S.D;
 }
 
 async function poll() {
