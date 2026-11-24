@@ -449,7 +449,7 @@ button,select,.btn{touch-action:manipulation}
 
 
 /* Extend touch-friendly sizing to tablets and touch-first devices regardless of viewport width. */
-@media(hover:none) and (pointer:coarse){
+@media(any-pointer:coarse){
   .btn.small{min-height:36px}
   .tabs button{height:36px;min-height:36px}
 }
