@@ -116,8 +116,8 @@ test("dashboard and configuration controls have programmatic accessible names", 
     assert.match(control[0], new RegExp(`\\baria-label="${label}"`));
   }
 
-  assert.match(html, /<button\\b[^>]*aria-label="上一页"[^>]*data-act="page"/);
-  assert.match(html, /<button\\b[^>]*aria-label="下一页"[^>]*data-act="page"/);
+  assert.match(html, /<button\b[^>]*aria-label="上一页"[^>]*data-act="page"/);
+  assert.match(html, /<button\b[^>]*aria-label="下一页"[^>]*data-act="page"/);
   assert.match(html, /<div class="tabs" role="group" aria-label="页面视图">/);
   assert.match(html, /<div class="seg" role="group" aria-label="上传顺序">/);
 });
