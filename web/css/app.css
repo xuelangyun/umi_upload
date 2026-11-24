@@ -446,3 +446,10 @@ button,select,.btn{touch-action:manipulation}
   body{height:auto;min-height:100dvh;overflow-x:hidden;overflow-y:auto}
   .table-wrap{flex:1 0 320px;min-height:320px}
 }
+
+
+/* Extend touch-friendly sizing to tablets and touch-first devices regardless of viewport width. */
+@media(hover:none) and (pointer:coarse){
+  .btn.small{min-height:36px}
+  .tabs button{height:36px;min-height:36px}
+}
