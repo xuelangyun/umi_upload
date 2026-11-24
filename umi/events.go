@@ -150,8 +150,8 @@ func (h *sseHub) subscribe() (<-chan []byte, func(), error) {
 		return nil, nil, err
 	}
 	sub := &sseSubscriber{
-		events: make(chan []byte, sseClientBuffer),
-		state:  stateJSON,
+		events:      make(chan []byte, sseClientBuffer),
+		state:       stateJSON,
 		jobID:       jobID,
 		logSequence: logSequence,
 	}
