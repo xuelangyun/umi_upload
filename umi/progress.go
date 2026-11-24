@@ -139,9 +139,10 @@ type Job struct {
 	Done       bool
 	T0         float64
 	TEnd       *float64
-	Log        []string
-	Actives    []*JobContext
-	M          *Meter
+	Log          []string
+	logSequence uint64
+	Actives      []*JobContext
+	M            *Meter
 }
 
 func JobLog(j *Job, tag string, text string) {
@@ -156,6 +157,7 @@ func JobLog(j *Job, tag string, text string) {
 	line := fmt.Sprintf("[%s] %s%s", ts, prefix, text)
 	PL.Lock()
 	j.Log = append(j.Log, line)
+	j.logSequence++
 	if len(j.Log) > sseLogHistoryLimit {
 		j.Log = append([]string(nil), j.Log[len(j.Log)-sseLogHistoryLimit:]...)
 	}
