@@ -198,3 +198,19 @@ test("modal dialogs expose names and manage keyboard focus", () => {
   assert.equal(modal.style.display, "none");
   assert.equal(activeElement, trigger);
 });
+
+
+test("data table sorting and selection controls are keyboard and screen-reader accessible", () => {
+  const tables = fs.readFileSync(path.resolve(__dirname, "..", "web/js/tables.js"), "utf8");
+  const main = fs.readFileSync(path.resolve(__dirname, "..", "web/js/main.js"), "utf8");
+
+  assert.match(tables, /data-act="sort" data-k="\$\{c\[1\]\}" tabindex="0"/);
+  assert.match(tables, /aria-sort="\$\{S\.sortD > 0 \? 'ascending' : 'descending'\}"/);
+  assert.match(tables, /aria-label="全选当前筛选结果"/);
+  assert.match(tables, /aria-label="选择会话 \$\{esc\(r\.name\)\}"/);
+
+  assert.match(main, /\$\('tb'\)\.addEventListener\('keydown', e =>/);
+  assert.match(main, /e\.key !== 'Enter' && e\.key !== ' '/);
+  assert.match(main, /e\.preventDefault\(\);\s*header\.click\(\);/);
+  assert.match(main, /header => header\.dataset\.k === key\)\?\.focus\(\{preventScroll: true\}\)/);
+});
