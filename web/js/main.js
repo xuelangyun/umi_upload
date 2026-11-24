@@ -89,6 +89,7 @@ function scheduleDatasetSnapshotRetry() {
 }
 
 function refreshDatasetSnapshot(targetVersion) {
+  if (S.stopped) return Promise.resolve();
   const target = Number(targetVersion || 0);
   if (!Number.isFinite(target) || target <= (S.datasetVersion || 0)) return Promise.resolve();
   S.datasetRefreshTarget = Math.max(S.datasetRefreshTarget || 0, target);
