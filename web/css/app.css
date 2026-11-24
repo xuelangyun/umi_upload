@@ -433,3 +433,9 @@ button,select,.btn{touch-action:manipulation}
 @media(max-width:640px){
   .btn.small{min-height:34px}
 }
+
+
+/* Make the existing page tabs easier to tap on phone-width screens. */
+@media(max-width:640px){
+  .tabs button{height:36px;min-height:36px}
+}
