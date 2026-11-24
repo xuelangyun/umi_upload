@@ -121,3 +121,80 @@ test("dashboard and configuration controls have programmatic accessible names", 
   assert.match(html, /<div class="tabs" role="group" aria-label="页面视图">/);
   assert.match(html, /<div class="seg" role="group" aria-label="上传顺序">/);
 });
+
+
+test("modal dialogs expose names and manage keyboard focus", () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "..", "web/index.html"), "utf8");
+  const dialogs = fs.readFileSync(path.resolve(__dirname, "..", "web/js/dialogs.js"), "utf8");
+  const modalNames = [
+    ["mb", "mbTitle"],
+    ["mg", "mgTitle"],
+    ["mm", "mmTitle"],
+    ["vm", "vtitle"],
+    ["mp", "mpTitle"],
+    ["mc", "mcTitle"],
+    ["bye", "byeTitle"],
+  ];
+
+  for (const [modalId, titleId] of modalNames) {
+    assert.match(html, new RegExp('<div class="modal[^"]*" id="' + modalId + '" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">'));
+    assert.match(html, new RegExp('<h3 id="' + titleId + '">[^<]+</h3>'));
+  }
+
+  let activeElement;
+  const trigger = {
+    isConnected: true,
+    focus() { activeElement = this; },
+  };
+  const first = {
+    hidden: false,
+    getClientRects: () => [1],
+    focus() { activeElement = this; },
+  };
+  const last = {
+    hidden: false,
+    getClientRects: () => [1],
+    focus() { activeElement = this; },
+  };
+  let context;
+  const dialog = {
+    hasAttribute: () => false,
+    querySelectorAll: () => [first, last],
+    contains: element => element === first || element === last,
+    focus() { activeElement = this; },
+  };
+  const closeButton = {click: () => context.closeModal("test")};
+  const modal = {
+    style: {display: "none"},
+    classList: {contains: () => false},
+    querySelector: selector => selector === ".dlg" ? dialog : closeButton,
+  };
+  const listeners = {};
+  const document = {
+    get activeElement() { return activeElement; },
+    addEventListener(type, callback) { listeners[type] = callback; },
+    querySelectorAll: () => [modal],
+  };
+  activeElement = trigger;
+  context = vm.createContext({document, $: () => modal});
+  vm.runInContext(dialogs, context, {filename: "web/js/dialogs.js"});
+
+  context.openModal("test");
+  assert.equal(modal.style.display, "flex");
+  assert.equal(activeElement, first);
+
+  activeElement = last;
+  let prevented = false;
+  listeners.keydown({key: "Tab", shiftKey: false, preventDefault() { prevented = true; }});
+  assert.equal(prevented, true);
+  assert.equal(activeElement, first);
+
+  prevented = false;
+  listeners.keydown({key: "Tab", shiftKey: true, preventDefault() { prevented = true; }});
+  assert.equal(prevented, true);
+  assert.equal(activeElement, last);
+
+  listeners.keydown({key: "Escape", preventDefault() {}});
+  assert.equal(modal.style.display, "none");
+  assert.equal(activeElement, trigger);
+});
