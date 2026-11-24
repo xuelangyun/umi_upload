@@ -58,6 +58,14 @@ const REC_COLS = [
 
 const emptyRow = (n, msg) => `<tbody><tr><td class="empty" colspan="${n}">${msg}</td></tr></tbody>`;
 
+function uploadRecordsEmptyMessage(filters = S.F) {
+  const keys = ['fmt', 'type', 'status', 'device', 'cap_date', 'operator', 'task', 'location', 'q'];
+  const hasFilters = keys.some(key => String(filters?.[key] ?? '').trim() !== '');
+  return hasFilters
+    ? '没有符合当前筛选条件的上传记录，请调整条件或点击「清除」。'
+    : '暂无上传记录，完成上传任务后会显示在这里。';
+}
+
 function draw() {
   const ps = +$('ps').value;
   document.querySelectorAll('.act').forEach(b => b.disabled = S.busy || S.scanning);
@@ -97,7 +105,7 @@ function drawRecords(ps) {
     (S.RH.length ? '<tbody>' + S.RH.map(h => {
       const cp = h.cap_date || capOf(h.rel), dw = dwOf(cp, h.dir_date);
       return `<tr class="${dw ? 'dw' : ''}">${RC.map(c => c[2](h, dw, cp)).join('')}</tr>`;
-    }).join('') + '</tbody>' : emptyRow(RC.length, '没有符合条件的上传记录'));
+    }).join('') + '</tbody>' : emptyRow(RC.length, uploadRecordsEmptyMessage()));
 }
 
 function datasetFilteredStats() {
