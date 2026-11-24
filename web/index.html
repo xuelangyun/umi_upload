@@ -104,19 +104,19 @@
 <div id="toast" class="toast"></div>
 
 <!-- 弹窗：目录选择 / 扫描提示 / OSS 配置；退出后的遮罩 -->
-<div class="modal" id="mb"><div class="dlg"><h3>添加数据根目录</h3><div class="muted">可多选，支持整个盘符；勾选后点「添加所选」，未勾选则添加当前目录</div>
+<div class="modal" id="mb" role="dialog" aria-modal="true" aria-labelledby="mbTitle"><div class="dlg"><h3 id="mbTitle">添加数据根目录</h3><div class="muted">可多选，支持整个盘符；勾选后点「添加所选」，未勾选则添加当前目录</div>
   <div class="muted" id="bp"></div><div class="muted ok-text" id="bh"></div><div class="dirlist" id="bl"></div>
   <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mb">取消</button><button class="btn primary" data-act="addRoots">添加所选</button></div></div></div>
 
-<div class="modal" id="mg"><div class="dlg wide"><h3>累计采集时长明细</h3><div class="muted" id="gscope"></div><div id="gbody" class="gbody"></div>
+<div class="modal" id="mg" role="dialog" aria-modal="true" aria-labelledby="mgTitle"><div class="dlg wide"><h3 id="mgTitle">累计采集时长明细</h3><div class="muted" id="gscope"></div><div id="gbody" class="gbody"></div>
   <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mg">关闭</button></div></div></div>
 
-<div class="modal" id="mm"><div class="dlg wide xl"><h3 id="mmTitle">移动错放的标定数据</h3>
+<div class="modal" id="mm" role="dialog" aria-modal="true" aria-labelledby="mmTitle"><div class="dlg wide xl"><h3 id="mmTitle">移动错放的标定数据</h3>
   <div class="muted" id="mmDesc">umi_normal 下被判定为标定（时长 &lt; 3 分钟 / 任务名含「标定」/ 采集配置声明为标定）的会话，移动到 umi_calibration 的同层级目录。只做改名移动，不复制、不覆盖。</div>
   <div id="mbody" class="gbody"></div><div id="mres" class="mres"></div>
   <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mm">关闭</button><button class="btn primary" id="mgo" data-act="doMove">移动选中</button></div></div></div>
 
-<div class="modal" id="vm"><div class="dlg wide xl vdlg"><h3 id="vtitle">视频预览</h3>
+<div class="modal" id="vm" role="dialog" aria-modal="true" aria-labelledby="vtitle"><div class="dlg wide xl vdlg"><h3 id="vtitle">视频预览</h3>
   <div class="muted" id="vinfo"></div>
   <div class="vbar"><select id="vsel" aria-label="选择相机视频" title="选择相机视频"></select><label class="vlab">倍速<select id="vrate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option></select></label>
     <button class="btn small" data-act="stepVideo" data-d="-1" title="列表里的上一个会话">◀ 上一个</button><button class="btn small" data-act="stepVideo" data-d="1" title="列表里的下一个会话">下一个 ▶</button></div>
@@ -126,11 +126,11 @@
   <div class="dlg-f"><button class="btn" data-act="videoFolder">打开文件夹</button><span class="grow"></span><button class="btn" data-act="closeVideo">关闭</button>
     <button class="btn primary" id="vmove" data-act="videoMove"></button></div></div></div>
 
-<div class="modal" id="mp"><div class="dlg wide"><h3>扫描提示</h3><div id="pbody" class="pbody"></div>
+<div class="modal" id="mp" role="dialog" aria-modal="true" aria-labelledby="mpTitle"><div class="dlg wide"><h3 id="mpTitle">扫描提示</h3><div id="pbody" class="pbody"></div>
   <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mp">关闭</button></div></div></div>
 
-<div class="modal" id="mc"><div class="dlg config-dlg">
-  <div class="config-head"><div><h3>存储与并发配置</h3><div class="muted">修改后立即生效；运行中的上传不会被中断。</div></div></div>
+<div class="modal" id="mc" role="dialog" aria-modal="true" aria-labelledby="mcTitle"><div class="dlg config-dlg">
+  <div class="config-head"><div><h3 id="mcTitle">存储与并发配置</h3><div class="muted">修改后立即生效；运行中的上传不会被中断。</div></div></div>
   <section class="cfg-profile">
     <h4 class="sec">配置方案</h4>
     <div class="cfg-profile-row"><select id="c_profile_select" aria-label="配置方案"></select><button class="btn" data-act="switchConfigProfile">切换</button><button class="btn" data-act="deleteConfigProfile">删除</button></div>
@@ -177,7 +177,7 @@
   <div class="dlg-f"><button class="btn" data-act="closeModal" data-m="mc">关闭</button><button class="btn" data-act="saveConfig">保存</button><button class="btn primary" data-act="saveConfig" data-test="1">保存并测试</button></div>
 </div></div>
 
-<div class="modal solid" id="bye"><div class="dlg"><h3>服务已停止</h3><div class="muted">可以关闭此页面。再次使用请直接运行 umi_upload.exe（或 start.bat）。</div></div></div>
+<div class="modal solid" id="bye" role="dialog" aria-modal="true" aria-labelledby="byeTitle"><div class="dlg"><h3 id="byeTitle">服务已停止</h3><div class="muted">可以关闭此页面。再次使用请直接运行 umi_upload.exe（或 start.bat）。</div></div></div>
 
 <!-- 脚本按依赖顺序加载（均为普通脚本，共享全局）：util → api → panel → filters → tables → dialogs → main -->
 <script src="/static/js/util.js"></script>
