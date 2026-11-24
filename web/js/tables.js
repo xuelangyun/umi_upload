@@ -96,17 +96,28 @@ function renderMoveBtns() {
   $('mvBtn').textContent = 'ISuit 自动' + (stats.misplaced ? ` (${stats.misplaced})` : ''); $('umvBtn').textContent = 'UMI 移到标定' + (uN ? ` (${uN})` : ''); $('mvBackBtn').textContent = 'UMI 移回常规' + (uC ? ` (${uC})` : '');
 }
 
+function shouldRenderTable(view, rows, page, pageSize, selectionVersion = 0) {
+  const previous = S.tableRenderState;
+  if (previous && previous.view === view && previous.rows === rows &&
+      previous.page === page && previous.pageSize === pageSize &&
+      previous.selectionVersion === selectionVersion) return false;
+  S.tableRenderState = {view, rows, page, pageSize, selectionVersion};
+  return true;
+}
+
 function drawRecords(ps) {
   const RS = S.RS, pages = Number.isFinite(ps) ? Math.max(1, Math.ceil(RS.total / ps)) : 1;
   S.page = Math.min(S.page, pages - 1);
   $('pgi').textContent = Number.isFinite(ps) ? `${S.page + 1} / ${pages} 页 · 共 ${RS.total} 条` : `全部 ${RS.total} 条`;
   $('cards').innerHTML = `查询结果：<b>${RS.total}</b> 条记录 · <b>${RS.datasets || 0}</b> 个数据集 · 累计采集时长 <b>${hms(RS.duration)}</b> · 体积 <b>${sz(RS.size)}</b> <span class="muted">｜ 已上传 ${RS.ok_datasets || 0} 个 · ${hms(RS.ok_duration)} · ${sz(RS.ok_size)}</span>`;
-  const RC = REC_COLS;
-  $('tb').innerHTML = '<thead><tr>' + RC.map(c => `<th class="${c[1] ? 'n' : ''}">${c[0]}</th>`).join('') + '</tr></thead>' +
-    (S.RH.length ? '<tbody>' + S.RH.map(h => {
-      const cp = h.cap_date || capOf(h.rel), dw = dwOf(cp, h.dir_date);
-      return `<tr class="${dw ? 'dw' : ''}">${RC.map(c => c[2](h, dw, cp)).join('')}</tr>`;
-    }).join('') + '</tbody>' : emptyRow(RC.length, uploadRecordsEmptyMessage()));
+  if (shouldRenderTable(2, S.RH, S.page, ps)) {
+    const RC = REC_COLS;
+    $('tb').innerHTML = '<thead><tr>' + RC.map(c => `<th class="${c[1] ? 'n' : ''}">${c[0]}</th>`).join('') + '</tr></thead>' +
+      (S.RH.length ? '<tbody>' + S.RH.map(h => {
+        const cp = h.cap_date || capOf(h.rel), dw = dwOf(cp, h.dir_date);
+        return `<tr class="${dw ? 'dw' : ''}">${RC.map(c => c[2](h, dw, cp)).join('')}</tr>`;
+      }).join('') + '</tbody>' : emptyRow(RC.length, uploadRecordsEmptyMessage()));
+  }
 }
 
 function datasetFilteredStats() {
@@ -143,11 +154,13 @@ function drawDatasets(ps) {
       : c[0];
     return `<th class="${c[2] ? 'n' : ''}"${sorted ? ` aria-sort="${direction}"` : ''}>${label}</th>`;
   };
-  const DC = DATA_COLS;
-  $('tb').innerHTML = `<caption class="sr-only">数据集列表。可排序列可通过列标题按钮排序；再次操作可切换排序方向。</caption><thead><tr><th><input type="checkbox" id="all" aria-label="全选当前筛选结果" title="全选当前筛选结果（含所有页）"></th>${DC.map(th).join('')}</tr></thead>` +
-    (page.length ? '<tbody>' + page.map(r => `<tr class="${S.sel.has(r.id) ? 'sel' : ''}${rowWarn(r) ? ' dw' : ''}"><td><input type="checkbox" data-id="${r.id}" aria-label="选择会话 ${esc(r.name)}" ${S.sel.has(r.id) ? 'checked' : ''}></td>${DC.map(c => c[3](r)).join('')}</tr>`).join('') + '</tbody>'
-      : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
-  const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
+  if (shouldRenderTable(1, S.R, S.page, ps, S.selectionVersion)) {
+    const DC = DATA_COLS;
+    $('tb').innerHTML = `<caption class="sr-only">数据集列表。可排序列可通过列标题按钮排序；再次操作可切换排序方向。</caption><thead><tr><th><input type="checkbox" id="all" aria-label="全选当前筛选结果" title="全选当前筛选结果（含所有页）"></th>${DC.map(th).join('')}</tr></thead>` +
+      (page.length ? '<tbody>' + page.map(r => `<tr class="${S.sel.has(r.id) ? 'sel' : ''}${rowWarn(r) ? ' dw' : ''}"><td><input type="checkbox" data-id="${r.id}" aria-label="选择会话 ${esc(r.name)}" ${S.sel.has(r.id) ? 'checked' : ''}></td>${DC.map(c => c[3](r)).join('')}</tr>`).join('') + '</tbody>'
+        : emptyRow(DC.length + 1, S.D.length ? '没有符合条件的数据' : '还没有数据：先「＋ 添加目录」选择盘符/目录，再点「扫描」'));
+    const all = $('all'); if (all) all.checked = S.R.length > 0 && S.R.every(r => S.sel.has(r.id));
+  }
 }
 function getSelectionStats() {
   if (S.selectionStats) return S.selectionStats;
@@ -174,9 +187,11 @@ function setRowSelected(id, selected) {
   }
   if (selected) S.sel.add(id);
   else S.sel.delete(id);
+  S.selectionVersion++;
 }
 
 function clearSelection() {
+  if (S.sel.size) S.selectionVersion++;
   S.sel.clear();
   S.selectionStats = {umiNormal: 0, umiCalibration: 0};
 }
