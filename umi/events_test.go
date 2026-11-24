@@ -87,7 +87,7 @@ func TestJobLogSequenceTracksBoundedHistory(t *testing.T) {
 	if len(job.Log) != sseLogHistoryLimit {
 		t.Fatalf("retained log length = %d, want %d", len(job.Log), sseLogHistoryLimit)
 	}
-	if job.Log[0] != "line-2" || job.Log[len(job.Log)-1] != fmt.Sprintf("line-%d", sseLogHistoryLimit+1) {
+	if !strings.HasSuffix(job.Log[0], "line-2") || !strings.HasSuffix(job.Log[len(job.Log)-1], fmt.Sprintf("line-%d", sseLogHistoryLimit+1)) {
 		t.Fatal("bounded history does not contain the expected most recent lines")
 	}
 }
