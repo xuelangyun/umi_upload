@@ -4,7 +4,6 @@ package umi
 
 import (
 	"os"
-	"sort"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -40,11 +39,9 @@ func openScanDirectory(path string, cached []os.DirEntry) (scanDirectory, error)
 			_ = f.Close()
 			return nil, err
 		}
-		// os.ReadDir sorts by filename. Keep exactly that ordering for stable
-		// traversal and identical aggregation behavior.
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Name() < entries[j].Name()
-		})
+		// Stats and SessionSig use order-independent aggregates (sum/count/min/max),
+		// so keep the filesystem's native directory order instead of sorting.
+
 	}
 
 	return &linuxScanDirectory{file: f, fd: int(f.Fd()), entriesList: entries}, nil
