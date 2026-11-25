@@ -255,6 +255,9 @@ func Snapshot(source string, workers int, ctx *JobContext) ([]ManifestFile, erro
 
 	var visit func(dir string, parts []string) error
 	visit = func(dir string, parts []string) error {
+		if err := AppCtx.Err(); err != nil {
+			return err
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return err
@@ -267,6 +270,9 @@ func Snapshot(source string, workers int, ctx *JobContext) ([]ManifestFile, erro
 			return UTF16Compare(names[i], names[j]) < 0
 		})
 		for _, name := range names {
+			if err := AppCtx.Err(); err != nil {
+				return err
+			}
 			if err := SafePart(name); err != nil {
 				return err
 			}
@@ -313,8 +319,19 @@ func Snapshot(source string, workers int, ctx *JobContext) ([]ManifestFile, erro
 	var wg sync.WaitGroup
 
 	for idx, it := range pending {
+		if err := AppCtx.Err(); err != nil {
+			break
+		}
+		acquired := false
+		select {
+		case sem <- struct{}{}:
+			acquired = true
+		case <-AppCtx.Done():
+		}
+		if !acquired {
+			break
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(i int, item pendingItem) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -346,6 +363,9 @@ func Snapshot(source string, workers int, ctx *JobContext) ([]ManifestFile, erro
 		}(idx, it)
 	}
 	wg.Wait()
+	if err := AppCtx.Err(); err != nil {
+		return nil, err
+	}
 	if firstErr != nil {
 		return nil, firstErr
 	}
