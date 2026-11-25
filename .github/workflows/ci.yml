@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
 
-# Keep CI focused on the essential compile and package tests.
+# Keep CI focused on essential checks and platform builds.
 
 permissions:
   contents: read
@@ -32,17 +32,7 @@ jobs:
         run: go test ./...
 
       - name: Compare scan baseline and optimized path
-        run: go test ./umi -run '^
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/umi_upload" .
-
-      - name: Build Windows executable
-        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/umi_upload.exe" .
- -bench '^BenchmarkScanFilesystemComparison
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/umi_upload" .
-
-      - name: Build Windows executable
-        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/umi_upload.exe" .
- -benchtime=1x -benchmem -v
+        run: go test ./umi -run "^$" -bench "^BenchmarkScanFilesystemComparison$" -benchtime=1x -benchmem -v
 
       - name: Build Linux executable
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/umi_upload" .
