@@ -538,8 +538,10 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	}
 	inspectStarted := time.Now()
 	src := ds.Source
+	rootEntries := ds.entries
+	ds.entries = nil // release the discovery listing after this dataset is inspected
 	sigStarted := time.Now()
-	sig := sessionSignature(src, ds.entries)
+	sig := sessionSignature(src, rootEntries)
 	sigElapsed := time.Since(sigStarted)
 	if AppCtx.Err() != nil {
 		return nil
@@ -567,7 +569,7 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 			return nil
 		}
 		statsStarted := time.Now()
-		st := statsWithEntries(src, ds.Name, fmtName == "isuit", ds.entries)
+		st := statsWithEntries(src, ds.Name, fmtName == "isuit", rootEntries)
 		statsElapsed = time.Since(statsStarted)
 		if AppCtx.Err() != nil {
 			return nil
