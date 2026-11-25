@@ -203,6 +203,17 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 	}()
 
 	if err != nil {
+		if AppCtx.Err() != nil {
+			// Shutdown cancellation is an interrupted run, not an upload failure.
+			// Keep the multipart checkpoint and avoid writing a misleading failed
+			// upload row that could hide the resumable state on the next start.
+			CtxLog(ctx, "   程序退出导致任务中断，已保留可恢复现场")
+			PL.Lock()
+			job.Items[i].State = "fail"
+			job.Items[i].Msg = "程序退出时中断"
+			PL.Unlock()
+			return
+		}
 		CtxLog(ctx, fmt.Sprintf("   ✘ 失败: %v", err))
 		PL.Lock()
 		job.Items[i].State = "fail"
