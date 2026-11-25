@@ -293,10 +293,14 @@ test("dataset filtering caches results and selection counts stay incremental", (
     },
   );
   assert.equal(vm.runInContext("datasetOverview() === firstOverview", context), true);
+  const firstRows = vm.runInContext("rows()", context);
   vm.runInContext(
     "S.D = S.D.map(row => row.id === '1' ? {...row, device:'D003', operator:'Carol'} : row);",
     context,
   );
+  const nextRows = vm.runInContext("rows()", context);
+  assert.notEqual(nextRows, firstRows);
+  assert.equal(nextRows.find(row => row.id === '1').device, "D003");
   vm.runInContext("nextOverview = datasetOverview()", context);
   assert.notEqual(vm.runInContext("nextOverview", context), vm.runInContext("firstOverview", context));
   assert.deepEqual(
