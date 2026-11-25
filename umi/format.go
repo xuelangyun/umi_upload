@@ -651,6 +651,7 @@ func Discover(routes []RouteSpec, cfg map[string]string) ([]*DatasetMeta, []stri
 					Fmt:         s.Fmt,
 					Bucket:      bucket,
 					Conf:        spec.Conf,
+					entries:     s.Entries,
 				})
 				return nil
 			}()
