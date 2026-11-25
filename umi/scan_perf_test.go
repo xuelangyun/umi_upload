@@ -53,6 +53,83 @@ func TestScanFastPathPreservesResults(t *testing.T) {
 //   UMI_SCAN_BENCH_DIR=/data/ISuit-V3_xxx_20261125-101010 go test ./umi -run '^$' -bench '^BenchmarkScanFilesystemComparison$' -benchmem -count=5
 //
 // Optional overrides: UMI_SCAN_BENCH_NAME and UMI_SCAN_BENCH_SHARDS=0|1.
+// serialStatsWithEntriesForBenchmark preserves the optimized sequential
+// fstatat path used before bounded asynchronous metadata workers were added.
+func serialStatsWithEntriesForBenchmark(src, name string, shards bool, rootEntries []os.DirEntry) SessionStats {
+	var totalSize int64
+	slices := 0
+	var minHead, maxTail float64
+	hasHead := false
+	dur := 0.0
+
+	type stackItem struct {
+		dir     string
+		depth   int
+		entries []os.DirEntry
+	}
+	stack := []stackItem{{dir: src, depth: 0, entries: rootEntries}}
+	shardPre := name + "_"
+
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		dir, err := openScanDirectory(cur.dir, cur.entries)
+		if err != nil {
+			continue
+		}
+		for _, entry := range dir.entries() {
+			entryName := entry.Name()
+			if entry.IsDir() {
+				if entryName != "_pipeline" {
+					stack = append(stack, stackItem{dir: filepath.Join(cur.dir, entryName), depth: cur.depth + 1})
+				}
+				continue
+			}
+			if entry.Type()&os.ModeSymlink != 0 || Markers[entryName] {
+				continue
+			}
+			size, err := dir.entrySize(entry)
+			if err != nil {
+				continue
+			}
+			totalSize += size
+			if shards && cur.depth == 1 && strings.HasSuffix(entryName, ".yaml") && strings.HasPrefix(entryName, shardPre) {
+				slices++
+				if file, openErr := dir.openEntry(entry); openErr == nil {
+					head, tail, ok := parseShardTimesFromFile(file, size)
+					_ = file.Close()
+					if ok {
+						if !hasHead || head < minHead {
+							minHead = head
+						}
+						if !hasHead || tail > maxTail {
+							maxTail = tail
+						}
+						hasHead = true
+						if tail > head {
+							dur += tail - head
+						}
+					}
+				}
+			}
+		}
+		dir.close()
+	}
+
+	var start, end string
+	if hasHead {
+		start = FmtTS(minHead)
+		end = FmtTS(maxTail)
+	}
+	return SessionStats{
+		Size:     totalSize,
+		Slices:   slices,
+		Duration: math.Round(dur*100) / 100,
+		Start:    start,
+		End:      end,
+	}
+}
+
 func BenchmarkScanFilesystemComparison(b *testing.B) {
 	root, name, shards := scanBenchmarkDirectory(b)
 	entries, err := os.ReadDir(root)
@@ -63,11 +140,12 @@ func BenchmarkScanFilesystemComparison(b *testing.B) {
 	legacyStats := legacyStatsForTest(root, name, shards)
 	fastSig := sessionSignature(root, entries)
 	fastStats := statsWithEntries(root, name, shards, entries)
+	serialStats := serialStatsWithEntriesForBenchmark(root, name, shards, entries)
 	if fastSig != legacySig {
 		b.Fatalf("signature mismatch: optimized=%q legacy=%q", fastSig, legacySig)
 	}
-	if fastStats != legacyStats {
-		b.Fatalf("statistics mismatch: optimized=%#v legacy=%#v", fastStats, legacyStats)
+	if fastStats != legacyStats || fastStats != serialStats {
+		b.Fatalf("statistics mismatch: async=%#v serial=%#v legacy=%#v", fastStats, serialStats, legacyStats)
 	}
 
 	fileCount := countScanFiles(b, root)
@@ -88,6 +166,18 @@ func BenchmarkScanFilesystemComparison(b *testing.B) {
 		}
 	})
 
+	b.Run("optimized_serial_fstatat", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ReportMetric(float64(fileCount), "files")
+		for i := 0; i < b.N; i++ {
+			rootEntries, err := os.ReadDir(root)
+			if err != nil {
+				b.Fatal(err)
+			}
+			scanBenchmarkSignature = sessionSignature(root, rootEntries)
+			scanBenchmarkStats = serialStatsWithEntriesForBenchmark(root, name, shards, rootEntries)
+		}
+	})
 	b.Run("optimized_reuse_and_linux_fstatat", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ReportMetric(float64(fileCount), "files")
