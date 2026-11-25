@@ -374,9 +374,18 @@ func minInt64(a, b int64) int64 {
 }
 
 func UMIFrameTimes(src string) (*float64, *float64) {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return nil, nil
+	return umiFrameTimes(src, nil)
+}
+
+// umiFrameTimes reuses the session root listing collected during discovery.
+func umiFrameTimes(src string, rootEntries []os.DirEntry) (*float64, *float64) {
+	entries := rootEntries
+	if entries == nil {
+		var err error
+		entries, err = os.ReadDir(src)
+		if err != nil {
+			return nil, nil
+		}
 	}
 	var loMin, hiMax float64
 	found := false
@@ -442,6 +451,10 @@ func UMIFrameTimes(src string) (*float64, *float64) {
 }
 
 func UMITimes(src, name string) (duration float64, startStr string, endStr string) {
+	return umiTimes(src, name, nil)
+}
+
+func umiTimes(src, name string, rootEntries []os.DirEntry) (duration float64, startStr string, endStr string) {
 	ls, le, ld := UMILogTimes(src)
 	var startSec, endSec float64
 	var dur float64
@@ -456,7 +469,7 @@ func UMITimes(src, name string) (duration float64, startStr string, endStr strin
 			endSec = *ls + dur
 		}
 	} else {
-		fs, fe := UMIFrameTimes(src)
+		fs, fe := umiFrameTimes(src, rootEntries)
 		if fs != nil && fe != nil && *fe >= *fs {
 			startSec = *fs
 			endSec = *fe
@@ -576,7 +589,7 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 		}
 		if fmtName == "umi_v3" {
 			umiStarted := time.Now()
-			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
+			st.Duration, st.Start, st.End = umiTimes(src, ds.Name, rootEntries)
 			umiElapsed = time.Since(umiStarted)
 		}
 
