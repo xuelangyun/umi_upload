@@ -122,7 +122,8 @@ function drawRecords(ps) {
 
 function datasetFilteredStats() {
   const key = S.datasetViewCache?.filterKey || '';
-  if (S.datasetFilteredStatsCache?.key === key) return S.datasetFilteredStatsCache.value;
+  const cached = S.datasetFilteredStatsCache;
+  if (cached?.key === key && cached.rows === S.R) return cached.value;
   const value = {duration: 0, size: 0, dateWarn: 0, roomBad: 0, umi: 0, shortCal: 0, isuit: 0, misplaced: 0, devDiff: 0, uploaded: 0};
   for (const r of S.R) {
     value.duration += r.duration || 0;
@@ -134,7 +135,7 @@ function datasetFilteredStats() {
     if (r.dev_diff) value.devDiff++;
     if (r.up_state === '已上传') value.uploaded++;
   }
-  S.datasetFilteredStatsCache = {key, value};
+  S.datasetFilteredStatsCache = {key, rows: S.R, value};
   return value;
 }
 
