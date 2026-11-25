@@ -819,16 +819,13 @@ func RunScan(opts ScanOpts, roots []string) {
 		if AppCtx.Err() != nil {
 			break
 		}
+		acquired := false
 		select {
 		case sem <- struct{}{}:
+			acquired = true
 		case <-AppCtx.Done():
-			break
 		}
-		if AppCtx.Err() != nil {
-			select {
-			case <-sem:
-			default:
-			}
+		if !acquired {
 			break
 		}
 		wg.Add(1)
