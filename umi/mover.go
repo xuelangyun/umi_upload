@@ -180,12 +180,29 @@ type FailedMove struct {
 	Error string `json:"error"`
 }
 
+func movedRecordFallback(rec *DatasetRecord, plan *MovePlan) *DatasetRecord {
+	moved := rec.Clone()
+	moved.Type = plan.To
+	moved.Source = plan.Target
+	moved.Rel = NewRelOf(rec, plan.To)
+	moved.ID = relID(moved.Rel)
+	moved.Sig = ""
+	moved.Cached = false
+	return moved
+}
+
 func MoveIDs(ids []string, to string) ([]MovedItem, []FailedMove) {
 	moved := []MovedItem{}
 	failed := []FailedMove{}
 	cfg := ApplyCfg()
 
-	for _, id := range ids {
+	for index, id := range ids {
+		if AppCtx.Err() != nil {
+			for _, pendingID := range ids[index:] {
+				failed = append(failed, FailedMove{ID: pendingID, Error: "程序正在退出，移动已中断"})
+			}
+			break
+		}
 		PL.Lock()
 		rec := Datasets[id]
 		PL.Unlock()
@@ -210,39 +227,44 @@ func MoveIDs(ids []string, to string) ([]MovedItem, []FailedMove) {
 			failed = append(failed, FailedMove{ID: id, Name: rec.Name, Error: err.Error()})
 			continue
 		}
+		if AppCtx.Err() != nil {
+			failed = append(failed, FailedMove{ID: id, Name: rec.Name, Error: "程序正在退出，移动已中断"})
+			for _, pendingID := range ids[index+1:] {
+				failed = append(failed, FailedMove{ID: pendingID, Error: "程序正在退出，移动已中断"})
+			}
+			break
+		}
 		if err := os.Rename(rec.Source, p.Target); err != nil {
 			failed = append(failed, FailedMove{ID: id, Name: rec.Name, Error: err.Error()})
 			continue
 		}
 
-		var newRec *DatasetRecord
-		movedDraft := rec.Clone()
-		movedDraft.Type = p.To
-		movedDraft.Source = p.Target
-		movedDraft.Rel = NewRelOf(rec, p.To)
-		if dsMeta, merr := MakeDS(movedDraft, cfg); merr == nil {
-			newRec = Inspect(dsMeta, nil, false)
-			newRec.Cached = false
+		// The directory has moved successfully. Preserve its new in-memory
+		// and SQLite identity even if shutdown cancels the follow-up inspection.
+		newRec := movedRecordFallback(rec, p)
+		rescan := true
+		if AppCtx.Err() == nil {
+			if dsMeta, merr := MakeDS(newRec, cfg); merr == nil {
+				if inspected := Inspect(dsMeta, nil, false); inspected != nil {
+					inspected.Cached = false
+					newRec = inspected
+					rescan = false
+				}
+			}
 		}
 
 		PL.Lock()
 		delete(Datasets, id)
-		if newRec != nil {
-			Datasets[newRec.ID] = newRec
-		}
+		Datasets[newRec.ID] = newRec
 		PL.Unlock()
 
-		newID := ""
-		if newRec != nil {
-			newID = newRec.ID
-		}
 		moved = append(moved, MovedItem{
 			ID:     id,
-			NewID:  newID,
+			NewID:  newRec.ID,
 			Name:   rec.Name,
 			Target: p.Target,
 			To:     p.To,
-			Rescan: newRec == nil,
+			Rescan: rescan,
 		})
 	}
 
