@@ -712,6 +712,24 @@ type ScanOpts struct {
 	Pad  bool
 }
 
+func uniqueScanRecords(recs []*DatasetRecord) (map[string]*DatasetRecord, []*DatasetRecord, []string) {
+	seen := make(map[string]*DatasetRecord, len(recs))
+	ordered := make([]*DatasetRecord, 0, len(recs))
+	var problems []string
+	for _, rec := range recs {
+		if rec == nil {
+			continue
+		}
+		if previous, exists := seen[rec.ID]; exists {
+			problems = append(problems, fmt.Sprintf("重复数据集(同一 OSS 路径): %s 与 %s", previous.Source, rec.Source))
+			continue
+		}
+		seen[rec.ID] = rec
+		ordered = append(ordered, rec)
+	}
+	return seen, ordered, problems
+}
+
 func RunScan(opts ScanOpts, roots []string) {
 	var res *ScanResult
 	defer func() {
@@ -803,24 +821,17 @@ func RunScan(opts ScanOpts, roots []string) {
 	}
 	wg.Wait()
 
-	seen := map[string]*DatasetRecord{}
-	var ordered []*DatasetRecord
 	cached := 0
-	over := 0
 	for _, r := range recs {
-		if r == nil {
-			continue
-		}
-		if r.Cached {
+		if r != nil && r.Cached {
 			cached++
 			r.Cached = false
 		}
-		if prev, exists := seen[r.ID]; exists {
-			problems = append(problems, fmt.Sprintf("重复数据集(同一 OSS 路径): %s 与 %s", prev.Source, r.Source))
-		} else {
-			ordered = append(ordered, r)
-		}
-		seen[r.ID] = r
+	}
+	seen, ordered, duplicateProblems := uniqueScanRecords(recs)
+	problems = append(problems, duplicateProblems...)
+	over := 0
+	for _, r := range ordered {
 		if r.PRTLocal != "" && r.PRTLocal != r.Room {
 			over++
 		}
@@ -835,11 +846,7 @@ func RunScan(opts ScanOpts, roots []string) {
 	Problems = allProbs
 	PL.Unlock()
 
-	var toSave []*DatasetRecord
-	for _, r := range seen {
-		toSave = append(toSave, r)
-	}
-	saveErr := SaveDatasets(toSave)
+	saveErr := SaveDatasets(ordered)
 
 	overCount := 0
 	if hasOv {
