@@ -2,7 +2,12 @@ package umi
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -64,5 +69,49 @@ func TestProcessOneDoesNotStartAfterShutdownCancellation(t *testing.T) {
 	}
 	if len(job.Actives) != 0 {
 		t.Fatalf("canceled task registered active contexts: %d", len(job.Actives))
+	}
+}
+
+
+func TestRootUpdateIsRejectedDuringScan(t *testing.T) {
+	oldDBPath := DBPath
+	oldScan := Scan
+	CloseDB()
+	DBPath = filepath.Join(t.TempDir(), "roots.db")
+	if err := InitDB(); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	activeWork.resetForTests()
+	PL.Lock()
+	Scan.Running = true
+	PL.Unlock()
+	t.Cleanup(func() {
+		activeWork.Wait()
+		activeWork.resetForTests()
+		CloseDB()
+		DBPath = oldDBPath
+		PL.Lock()
+		Scan = oldScan
+		PL.Unlock()
+	})
+
+	handler := NewHandler(fstest.MapFS{})
+	req := httptest.NewRequest(http.MethodPost, "/api/roots", strings.NewReader(`{"add":["/tmp/new-root"]}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("root update status = %d, want %d: %s", res.Code, http.StatusConflict, res.Body.String())
+	}
+
+	db, err := OpenDB()
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM roots WHERE path=?", "/tmp/new-root").Scan(&count); err != nil {
+		t.Fatalf("query roots: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("root update wrote %d rows while scan was running", count)
 	}
 }

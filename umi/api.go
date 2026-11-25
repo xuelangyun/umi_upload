@@ -1155,11 +1155,22 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
+		// Serialize root changes with scan admission so each scan uses one
+		// consistent root snapshot. The UI already disables these changes while scanning.
+		StartMu.Lock()
+		defer StartMu.Unlock()
 		if !activeWork.Begin() {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能修改数据根目录"})
 			return
 		}
 		defer activeWork.End()
+		PL.Lock()
+		scanning := Scan.Running
+		PL.Unlock()
+		if scanning {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": "正在扫描，暂不能修改目录"})
+			return
+		}
 		db, err := OpenDB()
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1188,13 +1199,13 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
+		StartMu.Lock()
 		roots := listRootPaths()
 		if len(roots) == 0 {
+			StartMu.Unlock()
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请先添加数据根目录"})
 			return
 		}
-
-		StartMu.Lock()
 		PL.Lock()
 		if Scan.Running {
 			PL.Unlock()
