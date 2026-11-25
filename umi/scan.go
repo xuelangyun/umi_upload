@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -786,6 +787,7 @@ func RunScan(opts ScanOpts, roots []string) {
 	}
 
 	var routes []RouteSpec
+	findStarted := time.Now()
 	for i, r := range roots {
 		if AppCtx.Err() != nil {
 			return
@@ -812,6 +814,9 @@ func RunScan(opts ScanOpts, roots []string) {
 		}
 	}
 
+	findElapsed := time.Since(findStarted)
+	log.Printf("scan: find_dirs elapsed=%s roots=%d routes=%d", findElapsed.Round(time.Millisecond), len(roots), len(routes))
+
 	PL.Lock()
 	Scan.Stage = "识别数据集"
 	PL.Unlock()
@@ -821,9 +826,12 @@ func RunScan(opts ScanOpts, roots []string) {
 	}
 	var metas []*DatasetMeta
 	var discProbs []string
+	discoverStarted := time.Now()
 	if len(routes) > 0 {
 		metas, discProbs = Discover(routes, cfg)
 	}
+	discoverElapsed := time.Since(discoverStarted)
+	log.Printf("scan: discover elapsed=%s datasets=%d problems=%d", discoverElapsed.Round(time.Millisecond), len(metas), len(discProbs))
 	if AppCtx.Err() != nil {
 		return
 	}
@@ -848,6 +856,7 @@ func RunScan(opts ScanOpts, roots []string) {
 		workers = 32
 	}
 	recs := make([]*DatasetRecord, len(metas))
+	inspectStarted := time.Now()
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for idx, m := range metas {
@@ -879,6 +888,8 @@ func RunScan(opts ScanOpts, roots []string) {
 		}(idx, m)
 	}
 	wg.Wait()
+	inspectElapsed := time.Since(inspectStarted)
+	log.Printf("scan: inspect elapsed=%s datasets=%d workers=%d", inspectElapsed.Round(time.Millisecond), len(metas), workers)
 	if AppCtx.Err() != nil {
 		return
 	}
@@ -908,7 +919,9 @@ func RunScan(opts ScanOpts, roots []string) {
 	Problems = allProbs
 	PL.Unlock()
 
+	saveStarted := time.Now()
 	saveErr := SaveDatasets(ordered)
+	log.Printf("scan: save elapsed=%s records=%d", time.Since(saveStarted).Round(time.Millisecond), len(ordered))
 
 	overCount := 0
 	if hasOv {
