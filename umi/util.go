@@ -131,6 +131,10 @@ type DatasetMeta struct {
 	Fmt         string
 	Bucket      string
 	Conf        string
+
+	// entries are retained from discovery so inspection can reuse the dataset
+	// root listing instead of reading that directory a second time.
+	entries []os.DirEntry
 }
 
 func MakeDS(rec *DatasetRecord, cfg map[string]string) (*DatasetMeta, error) {
