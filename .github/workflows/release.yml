@@ -33,7 +33,7 @@ jobs:
             -o dist/umi_upload-linux-amd64 .
 
           cd dist
-          zip -q umi_upload-linux-amd64.zip umi_upload-linux-amd64
+          zip -9 -q umi_upload-linux-amd64.zip umi_upload-linux-amd64
           sha256sum umi_upload.exe umi_upload-windows-amd64.zip \
             umi_upload-linux-amd64 umi_upload-linux-amd64.zip > SHA256SUMS.txt
 
