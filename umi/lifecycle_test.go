@@ -5,6 +5,15 @@ import (
 	"time"
 )
 
+
+// resetForTests isolates the API shutdown smoke test from other tests in the
+// same process. Production code never reopens task admission after Stop.
+func (t *workTracker) resetForTests() {
+	t.mu.Lock()
+	t.stopped = false
+	t.mu.Unlock()
+}
+
 func TestWorkTrackerStopsAdmissionAndWaitsForActiveWork(t *testing.T) {
 	var tracker workTracker
 	if !tracker.Begin() {
