@@ -42,6 +42,39 @@ func TestScanFastPathPreservesResults(t *testing.T) {
 	}
 }
 
+func TestInspectPathMetadataMatchesExistingHelpers(t *testing.T) {
+	paths := []string{
+		"/data/umi_normal/device-01/20261125/PRT_WX_room002/ISuit-V3_xxx_2026-11-25-10-10-10",
+		"/data/umi_calibration/PRT_SZ_room12/ISuit-V3_xxx_2026-11-25-10-10-10",
+		"/data/umi_normal/20261125/ISuit-V3_xxx_2026-11-25-10-10-10",
+		"/data/UMI_v3/20261125/UMI_v3_20261125_101010",
+		`D:\\capture\\umi_normal\\device-01\\20261125\\PRT_WX_room002\\ISuit-V3_xxx_2026-11-25-10-10-10`,
+		`\\\\server\\share\\umi_calibration\\device-02\\PRT_BJ_room3\\ISuit-V3_xxx_2026-11-25-10-10-10`,
+		"/",
+		"",
+	}
+
+	for _, path := range paths {
+		wantPRT, wantPRTDir := LocalPRT(path)
+		wantDevice := DeviceDir(path)
+		wantDate := ""
+		_, parts := splitPathComponents(path)
+		for _, part := range parts {
+			if reDirDate8.MatchString(part) {
+				wantDate = part
+				break
+			}
+		}
+
+		gotPRT, gotPRTDir, gotDevice, gotDate := inspectPathMetadata(path)
+		if gotPRT != wantPRT || gotPRTDir != wantPRTDir || gotDevice != wantDevice || gotDate != wantDate {
+			t.Errorf("inspectPathMetadata(%q) = (%q, %q, %q, %q), want (%q, %q, %q, %q)",
+				path, gotPRT, gotPRTDir, gotDevice, gotDate,
+				wantPRT, wantPRTDir, wantDevice, wantDate)
+		}
+	}
+}
+
 // BenchmarkScanFilesystemComparison runs both implementations against the
 // same directory in each benchmark process and verifies identical results
 // before timing.
