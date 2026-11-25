@@ -71,6 +71,9 @@ func BackfillUpload(rec *DatasetRecord, ds *DatasetMeta, r *CheckResult, runID i
 }
 
 func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string]string) {
+	if AppCtx.Err() != nil {
+		return
+	}
 	PL.Lock()
 	job.Items[i].State = "running"
 	PL.Unlock()
@@ -260,6 +263,10 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 	var wg sync.WaitGroup
 	for i, r := range recs {
 		if err := datasetLimiter.Acquire(AppCtx); err != nil {
+			break
+		}
+		if AppCtx.Err() != nil {
+			datasetLimiter.Release()
 			break
 		}
 		wg.Add(1)
