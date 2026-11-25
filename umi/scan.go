@@ -531,6 +531,48 @@ func relID(rel string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
+// inspectPathMetadata derives all path-based display fields from one split,
+// avoiding three separate path tokenizations for every inspected dataset.
+func inspectPathMetadata(src string) (prtLocal, prtDir, device, dirDate string) {
+	prefix, parts := splitPathComponents(src)
+
+	for _, part := range parts {
+		if reDirDate8.MatchString(part) {
+			dirDate = part
+			break
+		}
+	}
+
+	for i := len(parts) - 2; i >= 0; i-- {
+		if PRTRe.MatchString(parts[i]) {
+			prtLocal = parts[i]
+			prtDir = joinPathComponents(prefix, parts[:i+1], src)
+			break
+		}
+	}
+	if prtDir == "" {
+		if len(parts) > 0 {
+			prtDir = joinPathComponents(prefix, parts[:len(parts)-1], src)
+		} else {
+			prtDir = filepath.Dir(src)
+		}
+	}
+
+	for i := len(parts) - 2; i >= 0; i-- {
+		if _, ok := localDirMap[strings.ToLower(parts[i])]; !ok {
+			continue
+		}
+		if i+1 < len(parts)-1 {
+			candidate := parts[i+1]
+			if !reDirDate8.MatchString(candidate) && !PRTRe.MatchString(candidate) {
+				device = candidate
+			}
+		}
+		break
+	}
+	return
+}
+
 // Inspect builds a DatasetRecord from a discovered DatasetMeta, reusing cached stats when SessionSig matches.
 func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if AppCtx.Err() != nil {
@@ -642,22 +684,12 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if pad {
 		rel = PadRoom(rel)
 	}
-	prtLocal, prtDir := LocalPRT(src)
-	dev := DeviceDir(src)
+	prtLocal, prtDir, dev, dirDate := inspectPathMetadata(src)
 	if dev == "" && fmtName != "umi_v3" {
 		if len(rec.DeviceSN) >= 4 {
 			dev = rec.DeviceSN[len(rec.DeviceSN)-4:]
 		} else {
 			dev = rec.DeviceSN
-		}
-	}
-
-	dirDate := ""
-	_, parts := splitPathComponents(src)
-	for _, p := range parts {
-		if reDirDate8.MatchString(p) {
-			dirDate = p
-			break
 		}
 	}
 
