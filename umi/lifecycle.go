@@ -71,6 +71,9 @@ func Cleanup() {
 		if AppCancel != nil {
 			AppCancel()
 		}
+		// Wait for any admission already in progress to finish registering its
+		// run in Jobs before collecting IDs to mark interrupted.
+		StartMu.Lock()
 		PL.Lock()
 		var runIDs []int64
 		for _, j := range Jobs {
@@ -79,6 +82,7 @@ func Cleanup() {
 			}
 		}
 		PL.Unlock()
+		StartMu.Unlock()
 
 		if len(runIDs) > 0 {
 			if db, err := OpenDB(); err == nil {
