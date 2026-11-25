@@ -128,6 +128,9 @@ func Stats(src, name string, shards bool) SessionStats {
 	shardPre := name + "_"
 
 	for len(stack) > 0 {
+		if AppCtx.Err() != nil {
+			return SessionStats{}
+		}
 		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
@@ -136,6 +139,9 @@ func Stats(src, name string, shards bool) SessionStats {
 			continue
 		}
 		for _, e := range entries {
+			if AppCtx.Err() != nil {
+				return SessionStats{}
+			}
 			en := e.Name()
 			full := filepath.Join(cur.dir, en)
 			if e.IsDir() {
@@ -245,12 +251,18 @@ func parseLogEpoch(line string) (float64, bool) {
 }
 
 func UMILogTimes(src string) (start *float64, end *float64, dur *float64) {
+	if AppCtx.Err() != nil {
+		return nil, nil, nil
+	}
 	p := filepath.Join(src, "metadata", "recording.log")
 	text, err := ReadText(p)
 	if err != nil {
 		return nil, nil, nil
 	}
 	for _, line := range strings.Split(text, "\n") {
+		if AppCtx.Err() != nil {
+			return nil, nil, nil
+		}
 		line = strings.TrimRight(line, "\r")
 		if start == nil && strings.Contains(line, " INFO 录制开始") {
 			if ep, ok := parseLogEpoch(line); ok {
@@ -333,6 +345,9 @@ func UMIFrameTimes(src string) (*float64, *float64) {
 	var loMin, hiMax float64
 	found := false
 	for _, d := range entries {
+		if AppCtx.Err() != nil {
+			return nil, nil
+		}
 		if !d.IsDir() || d.Name() == "metadata" {
 			continue
 		}
@@ -342,6 +357,9 @@ func UMIFrameTimes(src string) (*float64, *float64) {
 			continue
 		}
 		for _, f := range files {
+			if AppCtx.Err() != nil {
+				return nil, nil
+			}
 			if f.IsDir() || !strings.HasSuffix(f.Name(), ".frames.csv") {
 				continue
 			}
@@ -479,8 +497,14 @@ func relID(rel string) string {
 
 // Inspect builds a DatasetRecord from a discovered DatasetMeta, reusing cached stats when SessionSig matches.
 func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
+	if AppCtx.Err() != nil {
+		return nil
+	}
 	src := ds.Source
 	sig := SessionSig(src)
+	if AppCtx.Err() != nil {
+		return nil
+	}
 	fmtName := ds.Fmt
 	if fmtName == "" {
 		fmtName = FmtOfName(ds.Name)
@@ -495,7 +519,13 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 		rec.Cached = true
 	} else {
 		conf := ReadConf(src, fmtName)
+		if AppCtx.Err() != nil {
+			return nil
+		}
 		st := Stats(src, ds.Name, fmtName == "isuit")
+		if AppCtx.Err() != nil {
+			return nil
+		}
 		if fmtName == "umi_v3" {
 			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
 		}
