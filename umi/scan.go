@@ -143,10 +143,9 @@ func Stats(src, name string, shards bool) SessionStats {
 				return SessionStats{}
 			}
 			en := e.Name()
-			full := filepath.Join(cur.dir, en)
 			if e.IsDir() {
 				if en != "_pipeline" {
-					stack = append(stack, stackItem{dir: full, depth: cur.depth + 1})
+					stack = append(stack, stackItem{dir: filepath.Join(cur.dir, en), depth: cur.depth + 1})
 				}
 				continue
 			}
@@ -163,7 +162,7 @@ func Stats(src, name string, shards bool) SessionStats {
 			totalSize += info.Size()
 			if shards && cur.depth == 1 && strings.HasSuffix(en, ".yaml") && strings.HasPrefix(en, shardPre) {
 				slices++
-				if h, t, ok := parseShardTimes(full); ok {
+				if h, t, ok := parseShardTimes(filepath.Join(cur.dir, en)); ok {
 					if !hasHead || h < minHead {
 						minHead = h
 					}
