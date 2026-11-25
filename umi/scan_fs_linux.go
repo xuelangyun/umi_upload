@@ -14,13 +14,15 @@ import (
 // relative to that directory instead of resolving a full path for every entry.
 type scanDirectory interface {
 	entries() []os.DirEntry
-	metadata(os.DirEntry) (size int64, modTime int64, err error)
+	entrySize(os.DirEntry) (int64, error)
+	entryModTime(os.DirEntry) (int64, error)
 	modTime() (int64, error)
 	close()
 }
 
 type linuxScanDirectory struct {
-	file    *os.File
+	file        *os.File
+	fd          int
 	entriesList []os.DirEntry
 }
 
@@ -44,20 +46,33 @@ func openScanDirectory(path string, cached []os.DirEntry) (scanDirectory, error)
 		})
 	}
 
-	return &linuxScanDirectory{file: f, entriesList: entries}, nil
+	return &linuxScanDirectory{file: f, fd: int(f.Fd()), entriesList: entries}, nil
 }
 
 func (d *linuxScanDirectory) entries() []os.DirEntry {
 	return d.entriesList
 }
 
-func (d *linuxScanDirectory) metadata(entry os.DirEntry) (int64, int64, error) {
+func (d *linuxScanDirectory) stat(entry os.DirEntry) (unix.Stat_t, error) {
 	var st unix.Stat_t
-	if err := unix.Fstatat(int(d.file.Fd()), entry.Name(), &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return 0, 0, err
+	err := unix.Fstatat(d.fd, entry.Name(), &st, unix.AT_SYMLINK_NOFOLLOW)
+	return st, err
+}
+
+func (d *linuxScanDirectory) entrySize(entry os.DirEntry) (int64, error) {
+	st, err := d.stat(entry)
+	if err != nil {
+		return 0, err
 	}
-	modTime := time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UnixNano()
-	return st.Size, modTime, nil
+	return st.Size, nil
+}
+
+func (d *linuxScanDirectory) entryModTime(entry os.DirEntry) (int64, error) {
+	st, err := d.stat(entry)
+	if err != nil {
+		return 0, err
+	}
+	return time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UnixNano(), nil
 }
 
 func (d *linuxScanDirectory) modTime() (int64, error) {
