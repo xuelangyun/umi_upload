@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path"
@@ -493,8 +494,11 @@ type DiscoveredSession struct {
 }
 
 func FindSessions(root string) ([]DiscoveredSession, []string) {
+	started := time.Now()
 	var sessions []DiscoveredSession
 	var issues []string
+	dirsRead := 0
+	entriesRead := 0
 
 	var walk func(dir string)
 	walk = func(dir string) {
@@ -506,6 +510,8 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 			issues = append(issues, fmt.Sprintf("无法读取目录 %s: %v", dir, err))
 			return
 		}
+		dirsRead++
+		entriesRead += len(entries)
 		name := filepath.Base(dir)
 		if fmtName := FmtOfName(name); fmtName != "" {
 			sessions = append(sessions, DiscoveredSession{
@@ -533,6 +539,7 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 		}
 	}
 	walk(root)
+	log.Printf("scan: find_sessions elapsed=%s dirs=%d entries=%d sessions=%d issues=%d root=%q", time.Since(started).Round(time.Millisecond), dirsRead, entriesRead, len(sessions), len(issues), root)
 	return sessions, issues
 }
 
