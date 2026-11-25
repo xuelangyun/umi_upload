@@ -8,10 +8,43 @@ import (
 	"time"
 )
 
+type workTracker struct {
+	mu      sync.Mutex
+	stopped bool
+	wg      sync.WaitGroup
+}
+
+// Begin admits one long-running operation. Stop and Begin share the same lock,
+// so Wait can never race with a later WaitGroup.Add.
+func (t *workTracker) Begin() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.stopped {
+		return false
+	}
+	t.wg.Add(1)
+	return true
+}
+
+func (t *workTracker) End() {
+	t.wg.Done()
+}
+
+func (t *workTracker) Stop() {
+	t.mu.Lock()
+	t.stopped = true
+	t.mu.Unlock()
+}
+
+func (t *workTracker) Wait() {
+	t.wg.Wait()
+}
+
 var (
 	cleanupOnce sync.Once
 	onShutdown  func()
 	shutdownMu  sync.Mutex
+	activeWork  workTracker
 
 	// ShutdownLaterFunc can be overridden in tests to observe `/api/shutdown` without exiting the test binary.
 	ShutdownLaterFunc = defaultShutdownLater
@@ -26,6 +59,9 @@ func SetShutdownCallback(fn func()) {
 // Cleanup cancels in-flight SDK operations and marks any running DB run as interrupted.
 func Cleanup() {
 	cleanupOnce.Do(func() {
+		// Close task admission before cancellation. Every admitted scan, move,
+		// and job is tracked until its goroutines and persistence work finish.
+		activeWork.Stop()
 		if AppCancel != nil {
 			AppCancel()
 		}
@@ -45,6 +81,10 @@ func Cleanup() {
 				}
 			}
 		}
+
+		// Workers may still be unwinding canceled SDK calls or writing their
+		// final per-dataset records. Close SQLite only after all admitted work exits.
+		activeWork.Wait()
 
 		shutdownMu.Lock()
 		cb := onShutdown
