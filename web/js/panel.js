@@ -85,9 +85,9 @@ document.addEventListener('selectionchange', () => {
   if (pendingLogLines === null) return;
   const selection = window.getSelection();
   const log = $('lg');
-  const selectingLog = selection && !selection.isCollapsed &&
-    [...selection.getRangeAt(0).commonAncestorContainer.parentNode ? [selection.getRangeAt(0).commonAncestorContainer] : []]
-      .some(node => node === log || log.contains(node));
+  const isInLog = node => !!node && (node === log || log.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode));
+  const selectingLog = selection && !selection.isCollapsed && selection.rangeCount &&
+    (isInLog(selection.anchorNode) || isInLog(selection.focusNode));
   if (!selectingLog) {
     const lines = pendingLogLines;
     pendingLogLines = null;
