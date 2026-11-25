@@ -1,6 +1,7 @@
 package umi
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -41,5 +42,27 @@ func TestWorkTrackerStopsAdmissionAndWaitsForActiveWork(t *testing.T) {
 	case <-waited:
 	case <-time.After(time.Second):
 		t.Fatal("Wait did not return after the admitted work item ended")
+	}
+}
+
+
+func TestProcessOneDoesNotStartAfterShutdownCancellation(t *testing.T) {
+	oldCtx, oldCancel := AppCtx, AppCancel
+	ctx, cancel := context.WithCancel(context.Background())
+	AppCtx, AppCancel = ctx, cancel
+	t.Cleanup(func() {
+		cancel()
+		AppCtx, AppCancel = oldCtx, oldCancel
+	})
+	cancel()
+
+	job := &Job{Items: []JobItem{{State: "queued"}}}
+	ProcessOne(job, 0, &DatasetRecord{}, "upload", nil)
+
+	if job.Items[0].State != "queued" {
+		t.Fatalf("canceled task state = %q, want queued", job.Items[0].State)
+	}
+	if len(job.Actives) != 0 {
+		t.Fatalf("canceled task registered active contexts: %d", len(job.Actives))
 	}
 }
