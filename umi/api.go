@@ -870,6 +870,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 				return
 			}
+			// Serialize config writes with scan/upload/verify admission. This
+			// closes the gap between the busy check and a new job starting.
+			StartMu.Lock()
+			defer StartMu.Unlock()
 			cur := GetCfg()
 			merged, validationError := mergeConfigValues(cur, body)
 			if validationError != "" {
@@ -913,6 +917,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 				return
 			}
+			// Serialize profile activation/deletion with task admission so an
+			// operation cannot start between the busy check and profile switch.
+			StartMu.Lock()
+			defer StartMu.Unlock()
 			action := strOr(body["action"], "")
 			id := strings.TrimSpace(strOr(body["id"], ""))
 			PL.Lock()
