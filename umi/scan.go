@@ -517,23 +517,25 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	}
 
 	var rec DatasetRecord
+	confElapsed := time.Duration(0)
+	statsElapsed := time.Duration(0)
+	umiElapsed := time.Duration(0)
 	if prev != nil && sig != "" && prev.Sig == sig {
 		rec = *prev
 		rec.Cached = true
 	} else {
 		confStarted := time.Now()
 		conf := ReadConf(src, fmtName)
-		confElapsed := time.Since(confStarted)
+		confElapsed = time.Since(confStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
 		statsStarted := time.Now()
 		st := Stats(src, ds.Name, fmtName == "isuit")
-		statsElapsed := time.Since(statsStarted)
+		statsElapsed = time.Since(statsStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
-		umiElapsed := time.Duration(0)
 		if fmtName == "umi_v3" {
 			umiStarted := time.Now()
 			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
