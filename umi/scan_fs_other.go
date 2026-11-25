@@ -8,7 +8,8 @@ import "os"
 // fstatat lookups in scan_fs_linux.go.
 type scanDirectory interface {
 	entries() []os.DirEntry
-	metadata(os.DirEntry) (size int64, modTime int64, err error)
+	entrySize(os.DirEntry) (int64, error)
+	entryModTime(os.DirEntry) (int64, error)
 	modTime() (int64, error)
 	close()
 }
@@ -34,12 +35,20 @@ func (d *portableScanDirectory) entries() []os.DirEntry {
 	return d.entriesList
 }
 
-func (d *portableScanDirectory) metadata(entry os.DirEntry) (int64, int64, error) {
+func (d *portableScanDirectory) entrySize(entry os.DirEntry) (int64, error) {
 	info, err := entry.Info()
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	return info.Size(), info.ModTime().UnixNano(), nil
+	return info.Size(), nil
+}
+
+func (d *portableScanDirectory) entryModTime(entry os.DirEntry) (int64, error) {
+	info, err := entry.Info()
+	if err != nil {
+		return 0, err
+	}
+	return info.ModTime().UnixNano(), nil
 }
 
 func (d *portableScanDirectory) modTime() (int64, error) {
