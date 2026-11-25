@@ -1265,7 +1265,10 @@ func TestFullSmokeSuite(t *testing.T) {
 	}
 
 	shutdownCalled := false
-	ShutdownLaterFunc = func() { shutdownCalled = true }
+	ShutdownLaterFunc = func() {
+		shutdownCalled = true
+		activeWork.resetForTests()
+	}
 	sdCode, _ := cli.postJSON("/api/shutdown", map[string]any{})
 	if sdCode != 200 || !shutdownCalled {
 		t.Fatalf("shutdown endpoint failed: code=%d called=%v", sdCode, shutdownCalled)
