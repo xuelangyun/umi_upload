@@ -186,6 +186,9 @@ func movedRecordFallback(rec *DatasetRecord, plan *MovePlan) *DatasetRecord {
 	moved.Source = plan.Target
 	moved.Rel = NewRelOf(rec, plan.To)
 	moved.ID = relID(moved.Rel)
+	moved.PRTLocal, moved.PRTDir = LocalPRT(plan.Target)
+	moved.Device = DeviceDir(plan.Target)
+	moved.Misplaced = ""
 	moved.Sig = ""
 	moved.Cached = false
 	return moved
