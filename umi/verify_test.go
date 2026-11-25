@@ -338,3 +338,76 @@ func TestCommitWritesReadyOnlyAfterVerifiedManifest(t *testing.T) {
 		t.Fatalf("committed manifest not recoverable: %#v", commit)
 	}
 }
+
+
+func TestDoUploadRejectsExistingCommitWithSameSizeDifferentContent(t *testing.T) {
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "payload.bin"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	otherHash := sha256.Sum256([]byte("evil"))
+	fake := fakeCommittedManifest(t, Manifest{
+		SchemaVersion: 1,
+		DatasetID: "dataset",
+		CaptureDate: "2026-11-23",
+		DatasetType: "test",
+		Files: []ManifestFile{{
+			Path: "payload.bin",
+			Size: 4,
+			SHA256: hex.EncodeToString(otherHash[:]),
+		}},
+		CreatedAt: "2026-11-23T00:00:00.000Z",
+	})
+	fake.files = []RemoteObj{{Name: "payload.bin", Size: 4}}
+
+	_, _, _, err := DoUpload(nil, fake, nil, &DatasetMeta{
+		Source: src,
+		Name: "dataset",
+		CaptureDate: "2026-11-23",
+		Type: "test",
+		RawURI: "oss://test/dataset/",
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "不同内容") {
+		t.Fatalf("DoUpload error = %v, want different-content rejection", err)
+	}
+}
+
+func TestDoUploadSkipsExistingCommitOnlyWhenSHA256Matches(t *testing.T) {
+	src := t.TempDir()
+	payload := []byte("data")
+	if err := os.WriteFile(filepath.Join(src, "payload.bin"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localHash := sha256.Sum256(payload)
+	fake := fakeCommittedManifest(t, Manifest{
+		SchemaVersion: 1,
+		DatasetID: "dataset",
+		CaptureDate: "2026-11-23",
+		DatasetType: "test",
+		Files: []ManifestFile{{
+			Path: "payload.bin",
+			Size: int64(len(payload)),
+			SHA256: hex.EncodeToString(localHash[:]),
+		}},
+		CreatedAt: "2026-11-23T00:00:00.000Z",
+	})
+	fake.files = []RemoteObj{{Name: "payload.bin", Size: int64(len(payload))}}
+
+	oldCheckpointDir := CkptDir
+	CkptDir = filepath.Join(t.TempDir(), "checkpoints")
+	defer func() { CkptDir = oldCheckpointDir }()
+
+	status, _, count, err := DoUpload(nil, fake, nil, &DatasetMeta{
+		Source: src,
+		Name: "dataset",
+		CaptureDate: "2026-11-23",
+		Type: "test",
+		RawURI: "oss://test/dataset/",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "已存在" || count != 1 {
+		t.Fatalf("DoUpload result = status %q, count %d; want 已存在, 1", status, count)
+	}
+}
