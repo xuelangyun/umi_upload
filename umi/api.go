@@ -1199,6 +1199,12 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": "有上传/校验任务在运行，暂时不能扫描"})
 			return
 		}
+		if !activeWork.Begin() {
+			PL.Unlock()
+			StartMu.Unlock()
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能启动新任务"})
+			return
+		}
 		Scan = ScanState{
 			ID:      Scan.ID + 1,
 			Running: true,
@@ -1218,7 +1224,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 			Full: truthy(body["full"]),
 			Pad:  truthy(body["pad"]),
 		}
-		go RunScan(opts, roots)
+		go func() {
+			defer activeWork.End()
+			RunScan(opts, roots)
+		}()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 
@@ -1370,6 +1379,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 			}
 		}
 		JobLog(job, "", fmt.Sprintf("开始 %s，共 %d 个数据集，方式: %s，数据集并发: %d", action, len(recs), methodStr, dsJobsNum))
+		if !activeWork.Begin() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能启动新任务"})
+			return
+		}
 		var runErr error
 		job.RunID, runErr = StartRun(action, methodStr, dsJobsNum, len(recs))
 		if runErr != nil {
@@ -1380,7 +1393,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 		Jobs = map[string]*Job{job.ID: job}
 		PL.Unlock()
 
-		go RunJob(job, action, recs, c)
+		go func() {
+			defer activeWork.End()
+			RunJob(job, action, recs, c)
+		}()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 
@@ -1639,6 +1655,13 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": "正在移动数据，请稍候"})
 			return
 		}
+		if !activeWork.Begin() {
+			PL.Unlock()
+			MovingMu.Unlock()
+			StartMu.Unlock()
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能启动新任务"})
+			return
+		}
 		Moving = true
 		PL.Unlock()
 		StartMu.Unlock()
@@ -1648,6 +1671,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 			Moving = false
 			PL.Unlock()
 			MovingMu.Unlock()
+			activeWork.End()
 		}()
 
 		moved, failed := MoveIDs(ids, to)
@@ -1833,13 +1857,22 @@ func NewHandler(webFS fs.FS) http.Handler {
 			return
 		}
 		body, _ := readBodyMap(r)
-		if JobBusy() && !truthy(body["force"]) {
+		// Serialize shutdown admission with scan/run/move starts. Once stopped,
+		// no new long-running work can enter while Cleanup is preparing to exit.
+		StartMu.Lock()
+		PL.Lock()
+		busy := Scan.Running || Moving || AnyJobRunningLocked()
+		PL.Unlock()
+		if busy && !truthy(body["force"]) {
+			StartMu.Unlock()
 			writeJSON(w, http.StatusConflict, map[string]any{
 				"error":   "有任务正在运行，退出会中断它（已传完的数据不受影响，下次可继续）",
 				"running": true,
 			})
 			return
 		}
+		activeWork.Stop()
+		StartMu.Unlock()
 		ShutdownLaterFunc()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
