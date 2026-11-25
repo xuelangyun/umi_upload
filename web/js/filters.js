@@ -121,7 +121,7 @@ function rows() {
     f.operator || '', f.task || '', f.location || '', f.status || '', f.q || ''
   ]);
   const sortKey = filterKey + '\u0000' + S.sortK + '\u0000' + S.sortD;
-  if (S.datasetViewCache?.key === sortKey) return S.datasetViewCache.rows;
+  if (S.datasetViewCache?.key === sortKey && S.datasetViewCache.data === S.D) return S.datasetViewCache.rows;
 
   const task = lcs(f.task), location = lcs(f.location);
   const words = lcs(f.q).replace(/\\/g, '/').split(/\s+/).filter(Boolean);
@@ -145,6 +145,6 @@ function rows() {
     const x = a[S.sortK], y = b[S.sortK];
     return (x > y ? 1 : x < y ? -1 : 0) * S.sortD || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
   });
-  S.datasetViewCache = {key: sortKey, filterKey, rows: result};
+  S.datasetViewCache = {key: sortKey, filterKey, data: S.D, rows: result};
   return result;
 }
