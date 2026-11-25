@@ -500,8 +500,11 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if AppCtx.Err() != nil {
 		return nil
 	}
+	inspectStarted := time.Now()
 	src := ds.Source
+	sigStarted := time.Now()
 	sig := SessionSig(src)
+	sigElapsed := time.Since(sigStarted)
 	if AppCtx.Err() != nil {
 		return nil
 	}
@@ -518,16 +521,23 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 		rec = *prev
 		rec.Cached = true
 	} else {
+		confStarted := time.Now()
 		conf := ReadConf(src, fmtName)
+		confElapsed := time.Since(confStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
+		statsStarted := time.Now()
 		st := Stats(src, ds.Name, fmtName == "isuit")
+		statsElapsed := time.Since(statsStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
+		umiElapsed := time.Duration(0)
 		if fmtName == "umi_v3" {
+			umiStarted := time.Now()
 			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
+			umiElapsed = time.Since(umiStarted)
 		}
 
 		purpose := Txt(conf["record_purpose"])
@@ -630,6 +640,12 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	rec.PRTDir = prtDir
 	rec.Sig = sig
 
+	if elapsed := time.Since(inspectStarted); elapsed >= 100*time.Millisecond {
+		log.Printf("scan: slow_inspect name=%q total=%s sig=%s conf=%s stats=%s umi_times=%s cached=%t",
+			ds.Name, elapsed.Round(time.Millisecond), sigElapsed.Round(time.Millisecond),
+			confElapsed.Round(time.Millisecond), statsElapsed.Round(time.Millisecond),
+			umiElapsed.Round(time.Millisecond), rec.Cached)
+	}
 	return &rec
 }
 
