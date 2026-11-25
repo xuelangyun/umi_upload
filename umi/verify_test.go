@@ -360,7 +360,7 @@ func TestDoUploadRejectsExistingCommitWithSameSizeDifferentContent(t *testing.T)
 	})
 	fake.files = []RemoteObj{{Name: "payload.bin", Size: 4}}
 
-	_, _, _, err := DoUpload(nil, fake, nil, &DatasetMeta{
+	_, _, _, err := DoUpload(&JobContext{Parent: &Job{M: NewMeter()}}, fake, nil, &DatasetMeta{
 		Source: src,
 		Name: "dataset",
 		CaptureDate: "2026-11-23",
@@ -397,7 +397,7 @@ func TestDoUploadSkipsExistingCommitOnlyWhenSHA256Matches(t *testing.T) {
 	CkptDir = filepath.Join(t.TempDir(), "checkpoints")
 	defer func() { CkptDir = oldCheckpointDir }()
 
-	status, _, count, err := DoUpload(nil, fake, nil, &DatasetMeta{
+	status, _, count, err := DoUpload(&JobContext{Parent: &Job{M: NewMeter()}}, fake, nil, &DatasetMeta{
 		Source: src,
 		Name: "dataset",
 		CaptureDate: "2026-11-23",
