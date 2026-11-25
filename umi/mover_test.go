@@ -5,7 +5,7 @@ import "testing"
 func TestMovedRecordFallbackRekeysAndInvalidatesScanSignature(t *testing.T) {
 	rec := &DatasetRecord{
 		ID: "old-id",
-		Rel: "normal/PRT_XC_room100/20261125/session",
+		Rel: "umi_normal/PRT_XC_room100/20261125/session",
 		Type: "normal",
 		Source: "/data/umi_normal/PRT_XC_room100/20261125/session",
 		Sig: "old-signature",
@@ -23,7 +23,7 @@ func TestMovedRecordFallbackRekeysAndInvalidatesScanSignature(t *testing.T) {
 	if moved.ID != relID(moved.Rel) || moved.ID == rec.ID {
 		t.Fatalf("fallback ID was not regenerated: old=%q new=%q rel=%q", rec.ID, moved.ID, moved.Rel)
 	}
-	if moved.Type != "calibration" || moved.Source != plan.Target || moved.Rel != "calibration/PRT_XC_room100/20261125/session" {
+	if moved.Type != "calibration" || moved.Source != plan.Target || moved.Rel != "umi_calibration/PRT_XC_room100/20261125/session" {
 		t.Fatalf("fallback location was not updated: %#v", moved)
 	}
 	if moved.Sig != "" || moved.Cached {
