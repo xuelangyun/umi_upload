@@ -300,7 +300,9 @@ func RunJob(job *Job, action string, recs []*DatasetRecord, c map[string]string)
 	PL.Unlock()
 
 	cleanupRuntime()
-	FinishRun(job.RunID, okCount, failCount)
+	if err := FinishRun(job.RunID, okCount, failCount); err != nil {
+		JobLog(job, "", "⚠ 任务执行已结束，但运行汇总写入 SQLite 失败："+truncateStr(err.Error(), 400))
+	}
 	now := nowSec()
 	PL.Lock()
 	job.Done = true
