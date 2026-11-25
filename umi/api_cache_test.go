@@ -164,3 +164,17 @@ func TestStaticAssetsUseConditionalETags(t *testing.T) {
 		t.Fatalf("updated asset body = %q", updated.Body.String())
 	}
 }
+
+func TestFinishRunReturnsDatabaseErrors(t *testing.T) {
+	oldDBPath := DBPath
+	CloseDB()
+	DBPath = t.TempDir()
+	defer func() {
+		CloseDB()
+		DBPath = oldDBPath
+	}()
+
+	if err := FinishRun(1, 0, 0); err == nil {
+		t.Fatal("FinishRun should return an error when SQLite cannot open the database path")
+	}
+}
