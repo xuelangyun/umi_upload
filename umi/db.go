@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -114,29 +113,13 @@ func InitDB() error {
 	}
 
 	if ver != 0 && ver != 4 && ver != 5 && ver != 6 && ver != DBVersion {
-		rows, qerr := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'")
-		if qerr == nil {
-			type obj struct{ name, typ string }
-			var objs []obj
-			for rows.Next() {
-				var o obj
-				if rows.Scan(&o.name, &o.typ) == nil {
-					objs = append(objs, o)
-				}
-			}
-			rows.Close()
-			for _, o := range objs {
-				if o.typ == "view" || strings.HasPrefix(o.name, "v_") {
-					_, _ = db.Exec(fmt.Sprintf(`DROP VIEW IF EXISTS "%s"`, o.name))
-				} else {
-					_, _ = db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, o.name))
-				}
-			}
-		}
+		return fmt.Errorf("unsupported SQLite user_version %d (supported: 0, 4, 5, 6, %d); database was left unchanged", ver, DBVersion)
 	}
 
 	if ver == 4 || ver == 5 {
-		_, _ = db.Exec("DROP TABLE IF EXISTS datasets")
+		if _, err := db.Exec("DROP TABLE IF EXISTS datasets"); err != nil {
+			return fmt.Errorf("remove stale dataset cache: %w", err)
+		}
 	}
 
 	if err := ensureCols(db, "uploads", uploadNewCols); err != nil {
@@ -150,10 +133,18 @@ func InitDB() error {
 		return err
 	}
 
-	_, _ = db.Exec("UPDATE uploads SET cap_date=substr(rel,-19,10) WHERE cap_date IS NULL OR cap_date=''")
-	_, _ = db.Exec("UPDATE uploads SET room=substr(rel, instr(rel,'/')+1, instr(substr(rel, instr(rel,'/')+1),'/')-1) WHERE room IS NULL OR room=''")
-	_, _ = db.Exec(fmt.Sprintf("PRAGMA user_version=%d", DBVersion))
-	_, _ = db.Exec("UPDATE runs SET status='interrupted', finished_at=? WHERE status='running'", NowTS())
+	if _, err := db.Exec("UPDATE uploads SET cap_date=substr(rel,-19,10) WHERE cap_date IS NULL OR cap_date=''"); err != nil {
+		return fmt.Errorf("backfill upload capture dates: %w", err)
+	}
+	if _, err := db.Exec("UPDATE uploads SET room=substr(rel, instr(rel,'/')+1, instr(substr(rel, instr(rel,'/')+1),'/')-1) WHERE room IS NULL OR room=''"); err != nil {
+		return fmt.Errorf("backfill upload room metadata: %w", err)
+	}
+	if _, err := db.Exec("UPDATE runs SET status='interrupted', finished_at=? WHERE status='running'", NowTS()); err != nil {
+		return fmt.Errorf("recover interrupted runs: %w", err)
+	}
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version=%d", DBVersion)); err != nil {
+		return fmt.Errorf("write SQLite schema version: %w", err)
+	}
 
 	_ = os.Chmod(DBPath, 0o600)
 
