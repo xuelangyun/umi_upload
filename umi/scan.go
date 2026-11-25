@@ -148,6 +148,27 @@ func statsWithEntries(src, name string, shards bool, rootEntries []os.DirEntry) 
 		depth   int
 		entries []os.DirEntry
 	}
+
+	// Keep a small worker pool per dataset. A process-wide semaphore in
+	// scan_stats_async.go bounds actual filesystem metadata I/O across all
+	// concurrently inspected datasets.
+	workerCount := scanStatsWorkerCount()
+	jobs := make(chan scanStatsFileJob, workerCount*2)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer workers.Done()
+			for job := range jobs {
+				processScanStatsFile(job)
+			}
+		}()
+	}
+	defer func() {
+		close(jobs)
+		workers.Wait()
+	}()
+
 	stack := []stackItem{{dir: src, depth: 0, entries: rootEntries}}
 	shardPre := name + "_"
 
@@ -163,6 +184,7 @@ func statsWithEntries(src, name string, shards bool, rootEntries []os.DirEntry) 
 			continue
 		}
 
+		batch := &scanStatsBatch{}
 		cancelled := false
 		for _, e := range dir.entries() {
 			if AppCtx.Err() != nil {
@@ -178,41 +200,43 @@ func statsWithEntries(src, name string, shards bool, rootEntries []os.DirEntry) 
 			}
 			// Keep the original DirEntry type check: on filesystems that report
 			// DT_UNKNOWN this preserves the old Info() behavior for symlinks.
-			if e.Type()&os.ModeSymlink != 0 {
+			if e.Type()&os.ModeSymlink != 0 || Markers[en] {
 				continue
 			}
-			if Markers[en] {
-				continue
+
+			isShard := shards && cur.depth == 1 && strings.HasSuffix(en, ".yaml") && strings.HasPrefix(en, shardPre)
+			batch.wg.Add(1)
+			select {
+			case jobs <- scanStatsFileJob{dir: dir, entry: e, shard: isShard, batch: batch}:
+			case <-AppCtx.Done():
+				batch.wg.Done()
+				cancelled = true
 			}
-			size, err := dir.entrySize(e)
-			if err != nil {
-				continue
-			}
-			totalSize += size
-			if shards && cur.depth == 1 && strings.HasSuffix(en, ".yaml") && strings.HasPrefix(en, shardPre) {
-				slices++
-				if file, openErr := dir.openEntry(e); openErr == nil {
-					h, t, ok := parseShardTimesFromFile(file, size)
-					_ = file.Close()
-					if ok {
-						if !hasHead || h < minHead {
-							minHead = h
-						}
-						if !hasHead || t > maxTail {
-							maxTail = t
-						}
-						hasHead = true
-						if t > h {
-							dur += t - h
-						}
-					}
-				}
+			if cancelled {
+				break
 			}
 		}
+
+		// Do not close the directory descriptor until every queued fstatat /
+		// openat operation referring to it has completed.
+		batch.wg.Wait()
 		dir.close()
-		if cancelled {
+		if cancelled || AppCtx.Err() != nil {
 			return SessionStats{}
 		}
+
+		totalSize += batch.totalSize
+		slices += batch.slices
+		if batch.hasHead {
+			if !hasHead || batch.minHead < minHead {
+				minHead = batch.minHead
+			}
+			if !hasHead || batch.maxTail > maxTail {
+				maxTail = batch.maxTail
+			}
+			hasHead = true
+		}
+		dur += batch.duration
 	}
 
 	var startStr, endStr string
