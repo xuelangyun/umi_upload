@@ -1155,6 +1155,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
+		if !activeWork.Begin() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能修改数据根目录"})
+			return
+		}
+		defer activeWork.End()
 		db, err := OpenDB()
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1854,6 +1859,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 			return
 		}
+		if !activeWork.Begin() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能修改运行记录"})
+			return
+		}
+		defer activeWork.End()
 		n := InterruptedNotice()
 		if n != nil && n["id"] != nil {
 			_ = SetSetting("ack_run", fmt.Sprint(n["id"]))
