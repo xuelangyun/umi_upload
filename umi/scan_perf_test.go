@@ -70,6 +70,7 @@ func BenchmarkScanFilesystemComparison(b *testing.B) {
 
 	b.Run("baseline_read_dir_info", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ReportMetric(float64(fileCount), "files")
 		for i := 0; i < b.N; i++ {
 			// Discovery reads the dataset root once. The old signature and Stats
 			// then each read the root again.
@@ -83,6 +84,7 @@ func BenchmarkScanFilesystemComparison(b *testing.B) {
 
 	b.Run("optimized_reuse_and_linux_fstatat", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ReportMetric(float64(fileCount), "files")
 		for i := 0; i < b.N; i++ {
 			// Both signature and Stats reuse the listing read by discovery.
 			rootEntries, err := os.ReadDir(root)
