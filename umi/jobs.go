@@ -130,8 +130,16 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 			if st == "成功" {
 				spd = float64(rec.Size) / el
 			}
-			_ = AddUpload(rec, ds, c, st, nf, rev, el, spd, "", ctx.RunID, "")
-			_ = SaveCheck(rec.Rel, &CheckResult{
+			if saveErr := AddUpload(rec, ds, c, st, nf, rev, el, spd, "", ctx.RunID, ""); saveErr != nil {
+				msg := "远端上传已完成，但上传记录写入 SQLite 失败：" + truncateStr(saveErr.Error(), 400)
+				CtxLog(ctx, "   ⚠ "+msg)
+				PL.Lock()
+				job.Items[i].State = "fail"
+				job.Items[i].Msg = truncateStr(msg, 200)
+				PL.Unlock()
+				return nil
+			}
+			if saveErr := SaveCheck(rec.Rel, &CheckResult{
 				Status:      "一致",
 				LocalFiles:  nf,
 				RemoteFiles: nf,
@@ -143,7 +151,9 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 				Revision:    rev,
 				Deep:        false,
 				CheckedAt:   NowTS(),
-			})
+			}); saveErr != nil {
+				CtxLog(ctx, "   ⚠ 上传记录已保存，但校验状态写入 SQLite 失败："+truncateStr(saveErr.Error(), 400))
+			}
 			PL.Lock()
 			job.Items[i].State = "done"
 			job.Items[i].Msg = st
@@ -161,7 +171,15 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 		if err != nil {
 			return err
 		}
-		_ = SaveCheck(rec.Rel, r)
+		if saveErr := SaveCheck(rec.Rel, r); saveErr != nil {
+			msg := "校验已完成，但校验结果写入 SQLite 失败：" + truncateStr(saveErr.Error(), 400)
+			CtxLog(ctx, "   ⚠ "+msg)
+			PL.Lock()
+			job.Items[i].State = "fail"
+			job.Items[i].Msg = truncateStr(msg, 200)
+			PL.Unlock()
+			return nil
+		}
 		PL.Lock()
 		job.Items[i].State = "done"
 		job.Items[i].Msg = r.Status
@@ -181,7 +199,9 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 		job.Items[i].Msg = truncateStr(err.Error(), 200)
 		PL.Unlock()
 		if action == "upload" {
-			_ = AddUpload(rec, ds, c, "失败", 0, "", time.Since(t0).Seconds(), 0, truncateStr(err.Error(), 500), ctx.RunID, "")
+			if saveErr := AddUpload(rec, ds, c, "失败", 0, "", time.Since(t0).Seconds(), 0, truncateStr(err.Error(), 500), ctx.RunID, ""); saveErr != nil {
+				CtxLog(ctx, "   ⚠ 上传失败记录也未能写入 SQLite："+truncateStr(saveErr.Error(), 400))
+			}
 		}
 	}
 }
