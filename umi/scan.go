@@ -839,7 +839,7 @@ func RunScan(opts ScanOpts, roots []string) {
 	for _, r := range seen {
 		toSave = append(toSave, r)
 	}
-	_ = SaveDatasets(toSave)
+	saveErr := SaveDatasets(toSave)
 
 	overCount := 0
 	if hasOv {
@@ -851,5 +851,13 @@ func RunScan(opts ScanOpts, roots []string) {
 		Cached:     cached,
 		Scanned:    len(recs) - cached,
 		Overridden: overCount,
+	}
+	if saveErr != nil {
+		msg := "扫描结果已计算完成，但保存到 SQLite 失败：" + saveErr.Error()
+		PL.Lock()
+		Problems = append(Problems, msg)
+		PL.Unlock()
+		res.Problems++
+		res.Error = msg
 	}
 }
