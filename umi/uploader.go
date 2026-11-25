@@ -29,6 +29,9 @@ func Inventory(src string) ([]InvItem, error) {
 		if walkErr != nil {
 			return walkErr
 		}
+		if err := AppCtx.Err(); err != nil {
+			return err
+		}
 		if fp == src {
 			return nil
 		}
