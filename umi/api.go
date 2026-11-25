@@ -874,6 +874,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 			// closes the gap between the busy check and a new job starting.
 			StartMu.Lock()
 			defer StartMu.Unlock()
+			if !activeWork.Begin() {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能修改配置"})
+				return
+			}
+			defer activeWork.End()
 			cur := GetCfg()
 			merged, validationError := mergeConfigValues(cur, body)
 			if validationError != "" {
@@ -921,6 +926,11 @@ func NewHandler(webFS fs.FS) http.Handler {
 			// operation cannot start between the busy check and profile switch.
 			StartMu.Lock()
 			defer StartMu.Unlock()
+			if !activeWork.Begin() {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能修改配置档案"})
+				return
+			}
+			defer activeWork.End()
 			action := strOr(body["action"], "")
 			id := strings.TrimSpace(strOr(body["id"], ""))
 			PL.Lock()
