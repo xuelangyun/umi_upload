@@ -26,13 +26,19 @@ func TestScanFastPathPreservesResults(t *testing.T) {
 	wantSig := legacySessionSignatureForTest(root)
 	gotSig := sessionSignature(root, entries)
 	if gotSig != wantSig {
-		t.Fatalf("session signature changed: optimized=%q legacy=%q", gotSig, wantSig)
+		t.Fatalf("cached session signature changed: optimized=%q legacy=%q", gotSig, wantSig)
+	}
+	if got := SessionSig(root); got != wantSig {
+		t.Fatalf("uncached session signature changed: got=%q legacy=%q", got, wantSig)
 	}
 
 	wantStats := legacyStatsForTest(root, name, true)
 	gotStats := statsWithEntries(root, name, true, entries)
 	if gotStats != wantStats {
-		t.Fatalf("scan statistics changed: optimized=%#v legacy=%#v", gotStats, wantStats)
+		t.Fatalf("cached scan statistics changed: optimized=%#v legacy=%#v", gotStats, wantStats)
+	}
+	if got := Stats(root, name, true); got != wantStats {
+		t.Fatalf("uncached scan statistics changed: optimized=%#v legacy=%#v", got, wantStats)
 	}
 }
 
