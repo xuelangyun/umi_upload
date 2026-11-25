@@ -29,6 +29,9 @@ func TestMovedRecordFallbackRekeysAndInvalidatesScanSignature(t *testing.T) {
 	if moved.Sig != "" || moved.Cached {
 		t.Fatalf("fallback record retained stale scan metadata: sig=%q cached=%v", moved.Sig, moved.Cached)
 	}
+	if moved.Misplaced != "" {
+		t.Fatalf("fallback record retained a stale misplacement warning: %q", moved.Misplaced)
+	}
 	if rec.ID != "old-id" || rec.Type != "normal" || rec.Sig != "old-signature" {
 		t.Fatalf("source record was mutated: %#v", rec)
 	}
