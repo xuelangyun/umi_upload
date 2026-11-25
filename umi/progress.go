@@ -331,6 +331,10 @@ func Snapshot(source string, workers int, ctx *JobContext) ([]ManifestFile, erro
 		if !acquired {
 			break
 		}
+		if err := AppCtx.Err(); err != nil {
+			<-sem
+			break
+		}
 		wg.Add(1)
 		go func(i int, item pendingItem) {
 			defer wg.Done()
