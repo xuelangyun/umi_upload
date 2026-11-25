@@ -705,16 +705,13 @@ func FindDirs(root string, maxDepth int) []FoundTypeDir {
 		if AppCtx.Err() != nil {
 			return
 		}
-		entries, err := os.ReadDir(p)
+		entries, _, err := readDirDirectories(p, false)
 		if err != nil {
 			return
 		}
 		for _, e := range entries {
 			if AppCtx.Err() != nil {
 				return
-			}
-			if !e.IsDir() {
-				continue
 			}
 			en := e.Name()
 			low := strings.ToLower(en)
