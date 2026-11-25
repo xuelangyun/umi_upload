@@ -752,6 +752,9 @@ func RunScan(opts ScanOpts, roots []string) {
 
 	var routes []RouteSpec
 	for i, r := range roots {
+		if AppCtx.Err() != nil {
+			return
+		}
 		PL.Lock()
 		Scan.Stage = fmt.Sprintf("查找目录 %d/%d", i+1, len(roots))
 		PL.Unlock()
@@ -778,10 +781,16 @@ func RunScan(opts ScanOpts, roots []string) {
 	Scan.Stage = "识别数据集"
 	PL.Unlock()
 
+	if AppCtx.Err() != nil {
+		return
+	}
 	var metas []*DatasetMeta
 	var discProbs []string
 	if len(routes) > 0 {
 		metas, discProbs = Discover(routes, cfg)
+	}
+	if AppCtx.Err() != nil {
+		return
 	}
 
 	PL.Lock()
@@ -807,8 +816,22 @@ func RunScan(opts ScanOpts, roots []string) {
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for idx, m := range metas {
+		if AppCtx.Err() != nil {
+			break
+		}
+		select {
+		case sem <- struct{}{}:
+		case <-AppCtx.Done():
+			break
+		}
+		if AppCtx.Err() != nil {
+			select {
+			case <-sem:
+			default:
+			}
+			break
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(i int, meta *DatasetMeta) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -820,6 +843,9 @@ func RunScan(opts ScanOpts, roots []string) {
 		}(idx, m)
 	}
 	wg.Wait()
+	if AppCtx.Err() != nil {
+		return
+	}
 
 	cached := 0
 	for _, r := range recs {
