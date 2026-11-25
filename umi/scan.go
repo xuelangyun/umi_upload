@@ -83,27 +83,34 @@ func parseShardTimes(fp string) (float64, float64, bool) {
 
 // SessionSig computes a lightweight directory signature: root_mtime_ns:subdir_count:newest_subdir_mtime_ns.
 func SessionSig(src string) string {
-	st, err := os.Stat(src)
+	return sessionSignature(src, nil)
+}
+
+// sessionSignature reuses entries already read by discovery when available.
+func sessionSignature(src string, rootEntries []os.DirEntry) string {
+	dir, err := openScanDirectory(src, rootEntries)
 	if err != nil {
 		return ""
 	}
-	entries, err := os.ReadDir(src)
+	defer dir.close()
+
+	rootMtime, err := dir.modTime()
 	if err != nil {
 		return ""
 	}
+
 	n := 0
 	var newest int64
-	for _, e := range entries {
-		if e.IsDir() {
-			n++
-			if info, ierr := e.Info(); ierr == nil {
-				if m := info.ModTime().UnixNano(); m > newest {
-					newest = m
-				}
-			}
+	for _, e := range dir.entries() {
+		if !e.IsDir() {
+			continue
+		}
+		n++
+		if _, mtime, ierr := dir.metadata(e); ierr == nil && mtime > newest {
+			newest = mtime
 		}
 	}
-	return fmt.Sprintf("%d:%d:%d", st.ModTime().UnixNano(), n, newest)
+	return fmt.Sprintf("%d:%d:%d", rootMtime, n, newest)
 }
 
 type SessionStats struct {
@@ -115,6 +122,12 @@ type SessionStats struct {
 }
 
 func Stats(src, name string, shards bool) SessionStats {
+	return statsWithEntries(src, name, shards, nil)
+}
+
+// statsWithEntries accepts the root listing discovered by FindSessions.
+// Nested directories are read once as they are traversed.
+func statsWithEntries(src, name string, shards bool, rootEntries []os.DirEntry) SessionStats {
 	var totalSize int64
 	slices := 0
 	var minHead, maxTail float64
@@ -122,10 +135,11 @@ func Stats(src, name string, shards bool) SessionStats {
 	dur := 0.0
 
 	type stackItem struct {
-		dir   string
-		depth int
+		dir     string
+		depth   int
+		entries []os.DirEntry
 	}
-	stack := []stackItem{{dir: src, depth: 0}}
+	stack := []stackItem{{dir: src, depth: 0, entries: rootEntries}}
 	shardPre := name + "_"
 
 	for len(stack) > 0 {
@@ -135,13 +149,16 @@ func Stats(src, name string, shards bool) SessionStats {
 		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		entries, err := os.ReadDir(cur.dir)
+		dir, err := openScanDirectory(cur.dir, cur.entries)
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
+
+		cancelled := false
+		for _, e := range dir.entries() {
 			if AppCtx.Err() != nil {
-				return SessionStats{}
+				cancelled = true
+				break
 			}
 			en := e.Name()
 			if e.IsDir() {
@@ -150,17 +167,19 @@ func Stats(src, name string, shards bool) SessionStats {
 				}
 				continue
 			}
+			// Keep the original DirEntry type check: on filesystems that report
+			// DT_UNKNOWN this preserves the old Info() behavior for symlinks.
 			if e.Type()&os.ModeSymlink != 0 {
 				continue
 			}
 			if Markers[en] {
 				continue
 			}
-			info, err := e.Info()
+			size, _, err := dir.metadata(e)
 			if err != nil {
 				continue
 			}
-			totalSize += info.Size()
+			totalSize += size
 			if shards && cur.depth == 1 && strings.HasSuffix(en, ".yaml") && strings.HasPrefix(en, shardPre) {
 				slices++
 				if h, t, ok := parseShardTimes(filepath.Join(cur.dir, en)); ok {
@@ -176,6 +195,10 @@ func Stats(src, name string, shards bool) SessionStats {
 					}
 				}
 			}
+		}
+		dir.close()
+		if cancelled {
+			return SessionStats{}
 		}
 	}
 
@@ -503,7 +526,7 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	inspectStarted := time.Now()
 	src := ds.Source
 	sigStarted := time.Now()
-	sig := SessionSig(src)
+	sig := sessionSignature(src, ds.entries)
 	sigElapsed := time.Since(sigStarted)
 	if AppCtx.Err() != nil {
 		return nil
@@ -531,7 +554,7 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 			return nil
 		}
 		statsStarted := time.Now()
-		st := Stats(src, ds.Name, fmtName == "isuit")
+		st := statsWithEntries(src, ds.Name, fmtName == "isuit", ds.entries)
 		statsElapsed = time.Since(statsStarted)
 		if AppCtx.Err() != nil {
 			return nil
