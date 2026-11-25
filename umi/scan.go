@@ -106,7 +106,7 @@ func sessionSignature(src string, rootEntries []os.DirEntry) string {
 			continue
 		}
 		n++
-		if _, mtime, ierr := dir.metadata(e); ierr == nil && mtime > newest {
+		if mtime, ierr := dir.entryModTime(e); ierr == nil && mtime > newest {
 			newest = mtime
 		}
 	}
@@ -175,7 +175,7 @@ func statsWithEntries(src, name string, shards bool, rootEntries []os.DirEntry) 
 			if Markers[en] {
 				continue
 			}
-			size, _, err := dir.metadata(e)
+			size, err := dir.entrySize(e)
 			if err != nil {
 				continue
 			}
