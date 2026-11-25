@@ -1446,3 +1446,24 @@ func TestS3CompatibleClientUsesAWSV4AndMultipart(t *testing.T) {
 		t.Fatalf("expected AWS Signature V4 on all S3 requests, observed %d requests", v4Requests)
 	}
 }
+
+func TestUniqueScanRecordsKeepsFirstSource(t *testing.T) {
+	first := &DatasetRecord{ID: "same", Source: "root-a/session"}
+	duplicate := &DatasetRecord{ID: "same", Source: "root-b/session"}
+	other := &DatasetRecord{ID: "other", Source: "root-c/session"}
+
+	byID, ordered, problems := uniqueScanRecords([]*DatasetRecord{first, duplicate, other})
+	if len(byID) != 2 || len(ordered) != 2 {
+		t.Fatalf("unique records = %d, ordered = %d; want 2 each", len(byID), len(ordered))
+	}
+	if byID["same"] != first || ordered[0] != first {
+		t.Fatal("duplicate OSS path must retain the first record in scan order")
+	}
+	if ordered[1] != other {
+		t.Fatal("unique records must retain scan order")
+	}
+	if len(problems) != 1 || !strings.Contains(problems[0], "root-a/session") || !strings.Contains(problems[0], "root-b/session") {
+		t.Fatalf("duplicate problems = %v, want one warning containing both sources", problems)
+	}
+}
+
