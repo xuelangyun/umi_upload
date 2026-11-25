@@ -143,6 +143,37 @@ func datasetInvSig(inv []InvItem) string {
 	return hex.EncodeToString(sum[:])[:24]
 }
 
+
+func prepareUploadCheckpoint(ds *DatasetMeta, inv []InvItem) (root, sub string, isResume bool, err error) {
+	root = CkptRoot(ds)
+	sub = filepath.Join(root, datasetInvSig(inv))
+	if err = os.MkdirAll(sub, 0o700); err != nil {
+		return "", "", false, fmt.Errorf("创建断点续传目录失败: %w", err)
+	}
+
+	markFile := filepath.Join(sub, "started")
+	_, statErr := os.Stat(markFile)
+	switch {
+	case statErr == nil:
+		isResume = true
+	case !os.IsNotExist(statErr):
+		return "", "", false, fmt.Errorf("检查断点续传标记失败: %w", statErr)
+	}
+
+	file, openErr := os.OpenFile(markFile, os.O_CREATE|os.O_WRONLY, 0o600)
+	if openErr != nil {
+		return "", "", false, fmt.Errorf("写入断点续传标记失败: %w", openErr)
+	}
+	if syncErr := file.Sync(); syncErr != nil {
+		_ = file.Close()
+		return "", "", false, fmt.Errorf("持久化断点续传标记失败: %w", syncErr)
+	}
+	if closeErr := file.Close(); closeErr != nil {
+		return "", "", false, fmt.Errorf("关闭断点续传标记失败: %w", closeErr)
+	}
+	return root, sub, isResume, nil
+}
+
 // NetCB returns a NetWaitCallback updating the dataset progress phase and job log during network outages.
 func NetCB(ctx *JobContext) NetWaitCallback {
 	var savedPhase string
@@ -694,27 +725,30 @@ func DoUpload(ctx *JobContext, oss OSSClient, rec *DatasetRecord, ds *DatasetMet
 			return "", "", 0, err
 		}
 		CtxLog(ctx, "   远端已提交且文件大小一致，跳过上传")
-		_ = os.RemoveAll(CkptRoot(ds))
+		if err := os.RemoveAll(CkptRoot(ds)); err != nil {
+			CtxLog(ctx, "   ⚠ 清理已完成任务的 checkpoint 失败："+truncateStr(err.Error(), 300))
+		}
 		return "已存在", ex.Manifest.Revision, len(inv), nil
 	}
 
-	// Persistent breakpoint resume check (umi_ckpt/)
-	ckRoot := CkptRoot(ds)
-	ckptSub := filepath.Join(ckRoot, datasetInvSig(inv))
-	_ = os.MkdirAll(ckptSub, 0o700)
-	markFile := filepath.Join(ckptSub, "started")
-	_, hadMarkErr := os.Stat(markFile)
-	isResume := hadMarkErr == nil
-	_ = os.WriteFile(markFile, nil, 0o600)
+	// Persistent breakpoint resume check (umi_ckpt/). Do not continue with a
+	// partially initialized marker: it would make a later retry look like a
+	// fresh upload and silently disable completed-object resume.
+	ckRoot, ckptSub, isResume, err := prepareUploadCheckpoint(ds, inv)
+	if err != nil {
+		return "", "", 0, err
+	}
 
 	skipRemote := map[string]int64{}
 	if isResume {
 		CtxLog(ctx, "   断点续传：上次未传完，已传到 OSS 的文件会跳过，大文件按 checkpoint 接着传")
-		if remObjs, err := oss.ListObjects(raw); err == nil {
-			for _, ro := range remObjs {
-				if !IsExcluded(ro.Name) {
-					skipRemote[ro.Name] = ro.Size
-				}
+		remObjs, listErr := oss.ListObjects(raw)
+		if listErr != nil {
+			return "", "", 0, fmt.Errorf("读取远端对象以恢复断点失败: %w", listErr)
+		}
+		for _, ro := range remObjs {
+			if !IsExcluded(ro.Name) {
+				skipRemote[ro.Name] = ro.Size
 			}
 		}
 	}
@@ -744,6 +778,8 @@ func DoUpload(ctx *JobContext, oss OSSClient, rec *DatasetRecord, ds *DatasetMet
 	if err != nil {
 		return "", "", 0, err
 	}
-	_ = os.RemoveAll(ckRoot)
+	if err := os.RemoveAll(ckRoot); err != nil {
+		CtxLog(ctx, "   ⚠ 上传已提交，但清理 checkpoint 失败："+truncateStr(err.Error(), 300))
+	}
 	return st, rev, len(files), nil
 }
