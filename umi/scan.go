@@ -374,9 +374,18 @@ func minInt64(a, b int64) int64 {
 }
 
 func UMIFrameTimes(src string) (*float64, *float64) {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return nil, nil
+	return umiFrameTimes(src, nil)
+}
+
+// umiFrameTimes reuses the session root listing collected during discovery.
+func umiFrameTimes(src string, rootEntries []os.DirEntry) (*float64, *float64) {
+	entries := rootEntries
+	if entries == nil {
+		var err error
+		entries, err = os.ReadDir(src)
+		if err != nil {
+			return nil, nil
+		}
 	}
 	var loMin, hiMax float64
 	found := false
@@ -442,6 +451,10 @@ func UMIFrameTimes(src string) (*float64, *float64) {
 }
 
 func UMITimes(src, name string) (duration float64, startStr string, endStr string) {
+	return umiTimes(src, name, nil)
+}
+
+func umiTimes(src, name string, rootEntries []os.DirEntry) (duration float64, startStr string, endStr string) {
 	ls, le, ld := UMILogTimes(src)
 	var startSec, endSec float64
 	var dur float64
@@ -456,7 +469,7 @@ func UMITimes(src, name string) (duration float64, startStr string, endStr strin
 			endSec = *ls + dur
 		}
 	} else {
-		fs, fe := UMIFrameTimes(src)
+		fs, fe := umiFrameTimes(src, rootEntries)
 		if fs != nil && fe != nil && *fe >= *fs {
 			startSec = *fs
 			endSec = *fe
@@ -475,6 +488,10 @@ func UMITimes(src, name string) (duration float64, startStr string, endStr strin
 
 func LocalPRT(src string) (string, string) {
 	prefix, parts := splitPathComponents(src)
+	return localPRTFromParts(prefix, parts, src)
+}
+
+func localPRTFromParts(prefix string, parts []string, src string) (string, string) {
 	for i := len(parts) - 2; i >= 0; i-- {
 		if PRTRe.MatchString(parts[i]) {
 			return parts[i], joinPathComponents(prefix, parts[:i+1], src)
@@ -489,6 +506,10 @@ func LocalPRT(src string) (string, string) {
 // DeviceDir extracts the folder immediately under umi_normal / umi_calibration unless it is an 8-digit date or PRT_* room folder.
 func DeviceDir(src string) string {
 	_, parts := splitPathComponents(src)
+	return deviceDirFromParts(parts)
+}
+
+func deviceDirFromParts(parts []string) string {
 	for i := len(parts) - 2; i >= 0; i-- {
 		if _, isTypeDir := localDirMap[strings.ToLower(parts[i])]; isTypeDir {
 			if i+1 < len(parts)-1 {
@@ -576,7 +597,7 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 		}
 		if fmtName == "umi_v3" {
 			umiStarted := time.Now()
-			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
+			st.Duration, st.Start, st.End = umiTimes(src, ds.Name, rootEntries)
 			umiElapsed = time.Since(umiStarted)
 		}
 
@@ -642,8 +663,10 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if pad {
 		rel = PadRoom(rel)
 	}
-	prtLocal, prtDir := LocalPRT(src)
-	dev := DeviceDir(src)
+	// Parse the source path once and reuse its components for all derived fields.
+	pathPrefix, parts := splitPathComponents(src)
+	prtLocal, prtDir := localPRTFromParts(pathPrefix, parts, src)
+	dev := deviceDirFromParts(parts)
 	if dev == "" && fmtName != "umi_v3" {
 		if len(rec.DeviceSN) >= 4 {
 			dev = rec.DeviceSN[len(rec.DeviceSN)-4:]
@@ -653,7 +676,6 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	}
 
 	dirDate := ""
-	_, parts := splitPathComponents(src)
 	for _, p := range parts {
 		if reDirDate8.MatchString(p) {
 			dirDate = p
@@ -705,16 +727,13 @@ func FindDirs(root string, maxDepth int) []FoundTypeDir {
 		if AppCtx.Err() != nil {
 			return
 		}
-		entries, err := os.ReadDir(p)
+		entries, _, err := readDirDirectories(p, false)
 		if err != nil {
 			return
 		}
 		for _, e := range entries {
 			if AppCtx.Err() != nil {
 				return
-			}
-			if !e.IsDir() {
-				continue
 			}
 			en := e.Name()
 			low := strings.ToLower(en)

@@ -505,15 +505,19 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 		if AppCtx.Err() != nil {
 			return
 		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			issues = append(issues, fmt.Sprintf("无法读取目录 %s: %v", dir, err))
-			return
-		}
-		dirsRead++
-		entriesRead += len(entries)
 		name := filepath.Base(dir)
 		if fmtName := FmtOfName(name); fmtName != "" {
+			// Dataset roots need the complete listing for validation and later
+			// inspection, so retain the existing full ReadDir path here.
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				if AppCtx.Err() == nil {
+					issues = append(issues, fmt.Sprintf("无法读取目录 %s: %v", dir, err))
+				}
+				return
+			}
+			dirsRead++
+			entriesRead += len(entries)
 			sessions = append(sessions, DiscoveredSession{
 				Source:  dir,
 				Entries: entries,
@@ -521,15 +525,21 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 			})
 			return
 		}
-		sort.Slice(entries, func(i, j int) bool {
-			return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
-		})
-		for _, e := range entries {
+
+		// Parent directories only need child directories. Read them in bounded
+		// batches and avoid retaining thousands of irrelevant file entries.
+		dirs, count, err := readDirDirectories(dir, true)
+		if err != nil {
+			if AppCtx.Err() == nil {
+				issues = append(issues, fmt.Sprintf("无法读取目录 %s: %v", dir, err))
+			}
+			return
+		}
+		dirsRead++
+		entriesRead += count
+		for _, e := range dirs {
 			if AppCtx.Err() != nil {
 				return
-			}
-			if !e.IsDir() {
-				continue
 			}
 			en := e.Name()
 			if strings.HasPrefix(en, ".") || strings.HasPrefix(en, "$") || en == "_pipeline" || SkipDirs[strings.ToLower(en)] {
