@@ -703,25 +703,37 @@ func DoUpload(ctx *JobContext, oss OSSClient, rec *DatasetRecord, ds *DatasetMet
 		return "", "", 0, err
 	}
 	if ex != nil {
-		localSizes := make(map[string]int64, len(inv))
-		checkList := make([]ManifestFile, len(inv))
-		for i, it := range inv {
-			localSizes[it.Rel] = it.Size
-			checkList[i] = ManifestFile{Path: it.Rel, Size: it.Size}
+		// A committed dataset is reusable only when its identity, inventory,
+		// sizes, and local content hashes all match the remote manifest. Size
+		// equality alone can incorrectly accept replaced files.
+		if ex.Manifest.DatasetID != ds.Name ||
+			ex.Manifest.CaptureDate != ds.CaptureDate ||
+			ex.Manifest.DatasetType != ds.Type {
+			return "", "", 0, NewUploadError("同一路径已提交过其他数据集，拒绝覆盖: %s", raw)
 		}
-		sameSize := len(ex.Manifest.Files) == len(localSizes)
-		if sameSize {
-			for _, f := range ex.Manifest.Files {
-				if sz, ok := localSizes[f.Path]; !ok || sz != f.Size {
-					sameSize = false
+
+		localFiles, hashErr := Snapshot(ds.Source, 8, ctx)
+		if hashErr != nil {
+			return "", "", 0, hashErr
+		}
+		remoteFiles := make(map[string]ManifestFile, len(ex.Manifest.Files))
+		for _, file := range ex.Manifest.Files {
+			remoteFiles[file.Path] = file
+		}
+		sameContent := len(ex.Manifest.Files) == len(localFiles)
+		if sameContent {
+			for _, local := range localFiles {
+				remote, ok := remoteFiles[local.Path]
+				if !ok || remote.Size != local.Size || remote.SHA256 != local.SHA256 {
+					sameContent = false
 					break
 				}
 			}
 		}
-		if !sameSize {
+		if !sameContent {
 			return "", "", 0, NewUploadError("同一路径已提交过不同内容，拒绝覆盖: %s", raw)
 		}
-		if err := VerifyInventory(oss, raw, checkList); err != nil {
+		if err := VerifyInventory(oss, raw, localFiles); err != nil {
 			return "", "", 0, err
 		}
 		CtxLog(ctx, "   远端已提交且文件大小一致，跳过上传")
