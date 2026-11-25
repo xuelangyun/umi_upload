@@ -616,11 +616,17 @@ func FindDirs(root string, maxDepth int) []FoundTypeDir {
 	var out []FoundTypeDir
 	var walk func(p string, d int)
 	walk = func(p string, d int) {
+		if AppCtx.Err() != nil {
+			return
+		}
 		entries, err := os.ReadDir(p)
 		if err != nil {
 			return
 		}
 		for _, e := range entries {
+			if AppCtx.Err() != nil {
+				return
+			}
 			if !e.IsDir() {
 				continue
 			}
