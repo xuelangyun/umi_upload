@@ -1043,6 +1043,13 @@ func NewHandler(webFS fs.FS) http.Handler {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "Method Not Allowed"})
 			return
 		}
+		// Bucket probes perform external network I/O. Track them so shutdown
+		// cannot close SQLite or exit while a probe is still using app state.
+		if !activeWork.Begin() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "程序正在退出，不能测试存储连接"})
+			return
+		}
+		defer activeWork.End()
 		c := ApplyCfg()
 		bkts := BucketsMap(c)
 		var out []string

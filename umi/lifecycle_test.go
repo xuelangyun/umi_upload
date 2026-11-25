@@ -115,3 +115,18 @@ func TestRootUpdateIsRejectedDuringScan(t *testing.T) {
 		t.Fatalf("root update wrote %d rows while scan was running", count)
 	}
 }
+
+
+func TestConfigTestIsRejectedAfterShutdown(t *testing.T) {
+	activeWork.resetForTests()
+	activeWork.Stop()
+	t.Cleanup(activeWork.resetForTests)
+
+	handler := NewHandler(fstest.MapFS{})
+	req := httptest.NewRequest(http.MethodPost, "/api/config/test", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("config test status = %d, want %d: %s", res.Code, http.StatusServiceUnavailable, res.Body.String())
+	}
+}
