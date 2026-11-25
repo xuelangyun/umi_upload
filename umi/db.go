@@ -317,18 +317,19 @@ func StartRun(action, method string, dsJobs, total int) int64 {
 	return id
 }
 
-func FinishRun(runID int64, okCount, failCount int) {
+func FinishRun(runID int64, okCount, failCount int) error {
 	if runID <= 0 {
-		return
+		return nil
 	}
 	db, err := OpenDB()
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = db.Exec(
+	_, err = db.Exec(
 		"UPDATE runs SET ok=?, fail=?, status='done', finished_at=? WHERE id=? AND status='running'",
 		okCount, failCount, NowTS(), runID,
 	)
+	return err
 }
 
 func InterruptedNotice() map[string]any {
