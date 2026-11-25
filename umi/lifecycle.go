@@ -40,6 +40,12 @@ func (t *workTracker) Wait() {
 	t.wg.Wait()
 }
 
+func (t *workTracker) resetForTests() {
+	t.mu.Lock()
+	t.stopped = false
+	t.mu.Unlock()
+}
+
 var (
 	cleanupOnce sync.Once
 	onShutdown  func()
