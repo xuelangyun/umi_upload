@@ -301,20 +301,23 @@ func LoadDatasets() map[string]*DatasetRecord {
 	return out
 }
 
-func StartRun(action, method string, dsJobs, total int) int64 {
+func StartRun(action, method string, dsJobs, total int) (int64, error) {
 	db, err := OpenDB()
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	res, err := db.Exec(
 		"INSERT INTO runs(action, method, ds_jobs, total, ok, fail, status, started_at) VALUES(?,?,?,?,0,0,'running',?)",
 		action, method, dsJobs, total, NowTS(),
 	)
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	id, _ := res.LastInsertId()
-	return id
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func FinishRun(runID int64, okCount, failCount int) error {
