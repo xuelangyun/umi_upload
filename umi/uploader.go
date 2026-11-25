@@ -736,7 +736,7 @@ func DoUpload(ctx *JobContext, oss OSSClient, rec *DatasetRecord, ds *DatasetMet
 		if err := VerifyInventory(oss, raw, localFiles); err != nil {
 			return "", "", 0, err
 		}
-		CtxLog(ctx, "   远端已提交且文件 SHA-256 一致，跳过上传")
+		CtxLog(ctx, "   远端清单中的 SHA-256 与本地一致，跳过上传")
 		if err := os.RemoveAll(CkptRoot(ds)); err != nil {
 			CtxLog(ctx, "   ⚠ 清理已完成任务的 checkpoint 失败："+truncateStr(err.Error(), 300))
 		}
