@@ -864,6 +864,10 @@ func RunScan(opts ScanOpts, roots []string) {
 		if !acquired {
 			break
 		}
+		if err := AppCtx.Err(); err != nil {
+			<-sem
+			break
+		}
 		wg.Add(1)
 		go func(i int, meta *DatasetMeta) {
 			defer wg.Done()
