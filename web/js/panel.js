@@ -78,10 +78,47 @@ function showJob(j) {
   renderLog(j.log);
 }
 
+let pendingLogLines = null;
+
+function getLogSelection() {
+  return typeof window !== 'undefined' && typeof window.getSelection === 'function'
+    ? window.getSelection()
+    : null;
+}
+
+// 日志被选中时暂缓 DOM 更新，避免 SSE 增量追加/清理节点打断文本选择和复制。
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('selectionchange', () => {
+    if (pendingLogLines === null) return;
+    const selection = getLogSelection();
+    const log = $('lg');
+    const isInLog = node => !!node && (node === log || log.contains(node.nodeType === 1 ? node : node.parentNode));
+    const selectingLog = selection && !selection.isCollapsed && selection.rangeCount &&
+      (isInLog(selection.anchorNode) || isInLog(selection.focusNode));
+    if (!selectingLog) {
+      const lines = pendingLogLines;
+      pendingLogLines = null;
+      renderLog(lines);
+    }
+  });
+}
+
 function renderLog(lines) {
   const log = $('lg'), onlyErrors = $('onlye').checked;
   const previous = S.lastLogSource || [], next = Array.isArray(lines) ? lines : [];
   if (next === S.lastLogSource && onlyErrors === S.lastLogOnly) return;
+
+  const selection = getLogSelection();
+  if (selection && !selection.isCollapsed && selection.rangeCount) {
+    const range = selection.getRangeAt(0);
+    const anchor = selection.anchorNode, focus = selection.focusNode;
+    const isInLog = node => !!node && (node === log || log.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode));
+    if (isInLog(anchor) || isInLog(focus)) {
+      pendingLogLines = next;
+      return;
+    }
+  }
+  pendingLogLines = null;
 
   const isVisible = line => !onlyErrors || /✘|错误|失败/.test(line);
   const createFragment = values => {
