@@ -539,7 +539,7 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 		}
 	}
 	walk(root)
-	log.Printf("scan: find_sessions elapsed=%s dirs=%d entries=%d sessions=%d issues=%d root=%q", time.Since(started).Round(time.Millisecond), dirsRead, entriesRead, len(sessions), len(issues), root)
+	log.Printf("扫描：目录发现 耗时=%s 目录数=%d 目录项数=%d 数据集数=%d 问题数=%d 根目录=%q", time.Since(started).Round(time.Millisecond), dirsRead, entriesRead, len(sessions), len(issues), root)
 	return sessions, issues
 }
 
