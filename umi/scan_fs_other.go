@@ -2,7 +2,10 @@
 
 package umi
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
 
 // scanDirectory provides a portable fallback. Linux uses directory-relative
 // fstatat lookups in scan_fs_linux.go.
@@ -10,6 +13,7 @@ type scanDirectory interface {
 	entries() []os.DirEntry
 	entrySize(os.DirEntry) (int64, error)
 	entryModTime(os.DirEntry) (int64, error)
+	openEntry(os.DirEntry) (*os.File, error)
 	modTime() (int64, error)
 	close()
 }
@@ -49,6 +53,10 @@ func (d *portableScanDirectory) entryModTime(entry os.DirEntry) (int64, error) {
 		return 0, err
 	}
 	return info.ModTime().UnixNano(), nil
+}
+
+func (d *portableScanDirectory) openEntry(entry os.DirEntry) (*os.File, error) {
+	return os.Open(filepath.Join(d.path, entry.Name()))
 }
 
 func (d *portableScanDirectory) modTime() (int64, error) {
