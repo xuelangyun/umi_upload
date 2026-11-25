@@ -1362,9 +1362,10 @@ func NewHandler(webFS fs.FS) http.Handler {
 			}
 		}
 		JobLog(job, "", fmt.Sprintf("开始 %s，共 %d 个数据集，方式: %s，数据集并发: %d", action, len(recs), methodStr, dsJobsNum))
-		job.RunID = StartRun(action, methodStr, dsJobsNum, len(recs))
-		if job.RunID == 0 {
-			JobLog(job, "", "⚠ 无法在 SQLite 中创建任务记录；本次任务仍会继续，但不会出现在历史运行记录中")
+		var runErr error
+		job.RunID, runErr = StartRun(action, methodStr, dsJobsNum, len(recs))
+		if runErr != nil {
+			JobLog(job, "", "⚠ 无法在 SQLite 中创建任务记录；本次任务仍会继续，但不会出现在历史运行记录中："+truncateStr(runErr.Error(), 400))
 		}
 
 		PL.Lock()
