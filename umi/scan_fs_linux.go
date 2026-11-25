@@ -16,6 +16,7 @@ type scanDirectory interface {
 	entries() []os.DirEntry
 	entrySize(os.DirEntry) (int64, error)
 	entryModTime(os.DirEntry) (int64, error)
+	openEntry(os.DirEntry) (*os.File, error)
 	modTime() (int64, error)
 	close()
 }
@@ -73,6 +74,14 @@ func (d *linuxScanDirectory) entryModTime(entry os.DirEntry) (int64, error) {
 		return 0, err
 	}
 	return time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UnixNano(), nil
+}
+
+func (d *linuxScanDirectory) openEntry(entry os.DirEntry) (*os.File, error) {
+	fd, err := unix.Openat(d.fd, entry.Name(), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), entry.Name()), nil
 }
 
 func (d *linuxScanDirectory) modTime() (int64, error) {
