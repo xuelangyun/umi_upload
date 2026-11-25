@@ -18,7 +18,9 @@ func installPlatformHandlers() {
 	winCtrlHandlerRef = syscall.NewCallback(func(ctrlType uint32) uintptr {
 		// 0=CTRL_C, 1=CTRL_BREAK, 2=CTRL_CLOSE, 5=CTRL_LOGOFF, 6=CTRL_SHUTDOWN
 		Cleanup()
-		return 0
+		// TRUE tells Windows this handler processed the event. Returning FALSE
+		// would continue handler dispatch and can invoke the default hard exit.
+		return 1
 	})
 	_, _, _ = proc.Call(winCtrlHandlerRef, 1)
 }
