@@ -488,6 +488,10 @@ func umiTimes(src, name string, rootEntries []os.DirEntry) (duration float64, st
 
 func LocalPRT(src string) (string, string) {
 	prefix, parts := splitPathComponents(src)
+	return localPRTFromParts(prefix, parts, src)
+}
+
+func localPRTFromParts(prefix string, parts []string, src string) (string, string) {
 	for i := len(parts) - 2; i >= 0; i-- {
 		if PRTRe.MatchString(parts[i]) {
 			return parts[i], joinPathComponents(prefix, parts[:i+1], src)
@@ -502,6 +506,10 @@ func LocalPRT(src string) (string, string) {
 // DeviceDir extracts the folder immediately under umi_normal / umi_calibration unless it is an 8-digit date or PRT_* room folder.
 func DeviceDir(src string) string {
 	_, parts := splitPathComponents(src)
+	return deviceDirFromParts(parts)
+}
+
+func deviceDirFromParts(parts []string) string {
 	for i := len(parts) - 2; i >= 0; i-- {
 		if _, isTypeDir := localDirMap[strings.ToLower(parts[i])]; isTypeDir {
 			if i+1 < len(parts)-1 {
@@ -655,8 +663,10 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if pad {
 		rel = PadRoom(rel)
 	}
-	prtLocal, prtDir := LocalPRT(src)
-	dev := DeviceDir(src)
+	// Parse the source path once and reuse its components for all derived fields.
+	pathPrefix, parts := splitPathComponents(src)
+	prtLocal, prtDir := localPRTFromParts(pathPrefix, parts, src)
+	dev := deviceDirFromParts(parts)
 	if dev == "" && fmtName != "umi_v3" {
 		if len(rec.DeviceSN) >= 4 {
 			dev = rec.DeviceSN[len(rec.DeviceSN)-4:]
@@ -666,7 +676,6 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	}
 
 	dirDate := ""
-	_, parts := splitPathComponents(src)
 	for _, p := range parts {
 		if reDirDate8.MatchString(p) {
 			dirDate = p
