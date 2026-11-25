@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -143,10 +144,9 @@ func Stats(src, name string, shards bool) SessionStats {
 				return SessionStats{}
 			}
 			en := e.Name()
-			full := filepath.Join(cur.dir, en)
 			if e.IsDir() {
 				if en != "_pipeline" {
-					stack = append(stack, stackItem{dir: full, depth: cur.depth + 1})
+					stack = append(stack, stackItem{dir: filepath.Join(cur.dir, en), depth: cur.depth + 1})
 				}
 				continue
 			}
@@ -163,7 +163,7 @@ func Stats(src, name string, shards bool) SessionStats {
 			totalSize += info.Size()
 			if shards && cur.depth == 1 && strings.HasSuffix(en, ".yaml") && strings.HasPrefix(en, shardPre) {
 				slices++
-				if h, t, ok := parseShardTimes(full); ok {
+				if h, t, ok := parseShardTimes(filepath.Join(cur.dir, en)); ok {
 					if !hasHead || h < minHead {
 						minHead = h
 					}
@@ -500,8 +500,11 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	if AppCtx.Err() != nil {
 		return nil
 	}
+	inspectStarted := time.Now()
 	src := ds.Source
+	sigStarted := time.Now()
 	sig := SessionSig(src)
+	sigElapsed := time.Since(sigStarted)
 	if AppCtx.Err() != nil {
 		return nil
 	}
@@ -514,20 +517,29 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	}
 
 	var rec DatasetRecord
+	confElapsed := time.Duration(0)
+	statsElapsed := time.Duration(0)
+	umiElapsed := time.Duration(0)
 	if prev != nil && sig != "" && prev.Sig == sig {
 		rec = *prev
 		rec.Cached = true
 	} else {
+		confStarted := time.Now()
 		conf := ReadConf(src, fmtName)
+		confElapsed = time.Since(confStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
+		statsStarted := time.Now()
 		st := Stats(src, ds.Name, fmtName == "isuit")
+		statsElapsed = time.Since(statsStarted)
 		if AppCtx.Err() != nil {
 			return nil
 		}
 		if fmtName == "umi_v3" {
+			umiStarted := time.Now()
 			st.Duration, st.Start, st.End = UMITimes(src, ds.Name)
+			umiElapsed = time.Since(umiStarted)
 		}
 
 		purpose := Txt(conf["record_purpose"])
@@ -630,6 +642,12 @@ func Inspect(ds *DatasetMeta, prev *DatasetRecord, pad bool) *DatasetRecord {
 	rec.PRTDir = prtDir
 	rec.Sig = sig
 
+	if elapsed := time.Since(inspectStarted); elapsed >= 100*time.Millisecond {
+		log.Printf("scan: slow_inspect name=%q total=%s sig=%s conf=%s stats=%s umi_times=%s cached=%t",
+			ds.Name, elapsed.Round(time.Millisecond), sigElapsed.Round(time.Millisecond),
+			confElapsed.Round(time.Millisecond), statsElapsed.Round(time.Millisecond),
+			umiElapsed.Round(time.Millisecond), rec.Cached)
+	}
 	return &rec
 }
 
@@ -787,6 +805,7 @@ func RunScan(opts ScanOpts, roots []string) {
 	}
 
 	var routes []RouteSpec
+	findStarted := time.Now()
 	for i, r := range roots {
 		if AppCtx.Err() != nil {
 			return
@@ -813,6 +832,9 @@ func RunScan(opts ScanOpts, roots []string) {
 		}
 	}
 
+	findElapsed := time.Since(findStarted)
+	log.Printf("scan: find_dirs elapsed=%s roots=%d routes=%d", findElapsed.Round(time.Millisecond), len(roots), len(routes))
+
 	PL.Lock()
 	Scan.Stage = "识别数据集"
 	PL.Unlock()
@@ -822,9 +844,12 @@ func RunScan(opts ScanOpts, roots []string) {
 	}
 	var metas []*DatasetMeta
 	var discProbs []string
+	discoverStarted := time.Now()
 	if len(routes) > 0 {
 		metas, discProbs = Discover(routes, cfg)
 	}
+	discoverElapsed := time.Since(discoverStarted)
+	log.Printf("scan: discover elapsed=%s datasets=%d problems=%d", discoverElapsed.Round(time.Millisecond), len(metas), len(discProbs))
 	if AppCtx.Err() != nil {
 		return
 	}
@@ -849,6 +874,7 @@ func RunScan(opts ScanOpts, roots []string) {
 		workers = 32
 	}
 	recs := make([]*DatasetRecord, len(metas))
+	inspectStarted := time.Now()
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for idx, m := range metas {
@@ -880,6 +906,8 @@ func RunScan(opts ScanOpts, roots []string) {
 		}(idx, m)
 	}
 	wg.Wait()
+	inspectElapsed := time.Since(inspectStarted)
+	log.Printf("scan: inspect elapsed=%s datasets=%d workers=%d", inspectElapsed.Round(time.Millisecond), len(metas), workers)
 	if AppCtx.Err() != nil {
 		return
 	}
@@ -909,7 +937,9 @@ func RunScan(opts ScanOpts, roots []string) {
 	Problems = allProbs
 	PL.Unlock()
 
+	saveStarted := time.Now()
 	saveErr := SaveDatasets(ordered)
+	log.Printf("scan: save elapsed=%s records=%d", time.Since(saveStarted).Round(time.Millisecond), len(ordered))
 
 	overCount := 0
 	if hasOv {
