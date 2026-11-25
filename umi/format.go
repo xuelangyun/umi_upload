@@ -498,6 +498,9 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 
 	var walk func(dir string)
 	walk = func(dir string) {
+		if AppCtx.Err() != nil {
+			return
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			issues = append(issues, fmt.Sprintf("无法读取目录 %s: %v", dir, err))
@@ -516,6 +519,9 @@ func FindSessions(root string) ([]DiscoveredSession, []string) {
 			return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
 		})
 		for _, e := range entries {
+			if AppCtx.Err() != nil {
+				return
+			}
 			if !e.IsDir() {
 				continue
 			}
@@ -562,6 +568,9 @@ func Discover(routes []RouteSpec, cfg map[string]string) ([]*DatasetMeta, []stri
 	emptyDesc := strings.Join(descParts, " 或 ")
 
 	for _, job := range routes {
+		if AppCtx.Err() != nil {
+			return datasets, problems
+		}
 		absRoot, err := filepath.Abs(job.Path)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s 文件夹无效: %s", job.Type, job.Path))
@@ -579,6 +588,9 @@ func Discover(routes []RouteSpec, cfg map[string]string) ([]*DatasetMeta, []stri
 			continue
 		}
 		for _, s := range sessions {
+			if AppCtx.Err() != nil {
+				return datasets, problems
+			}
 			name := filepath.Base(s.Source)
 			spec := Formats[s.Fmt]
 			err := func() error {
