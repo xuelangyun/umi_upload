@@ -8,6 +8,7 @@ package main
 
 import (
 	"archive/zip"
+	"compress/flate"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -157,6 +158,11 @@ func createZip(zipPath string, files []struct{ src, name string }) error {
 	defer f.Close()
 
 	zw := zip.NewWriter(f)
+	// Maximize compression for the downloadable Windows bundle. The executable
+	// remains byte-for-byte unchanged; only the ZIP container is affected.
+	zw.RegisterCompressor(zip.Deflate, func(w io.Writer) (io.WriteCloser, error) {
+		return flate.NewWriter(w, flate.BestCompression)
+	})
 	fixedTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, item := range files {
 		st, err := os.Stat(item.src)
