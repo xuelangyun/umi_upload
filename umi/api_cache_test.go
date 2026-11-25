@@ -165,7 +165,7 @@ func TestStaticAssetsUseConditionalETags(t *testing.T) {
 	}
 }
 
-func TestFinishRunReturnsDatabaseErrors(t *testing.T) {
+func TestRunPersistenceReturnsDatabaseErrors(t *testing.T) {
 	oldDBPath := DBPath
 	CloseDB()
 	DBPath = t.TempDir()
@@ -174,6 +174,9 @@ func TestFinishRunReturnsDatabaseErrors(t *testing.T) {
 		DBPath = oldDBPath
 	}()
 
+	if _, err := StartRun("upload", "SDK", 1, 1); err == nil {
+		t.Fatal("StartRun should return an error when SQLite cannot open the database path")
+	}
 	if err := FinishRun(1, 0, 0); err == nil {
 		t.Fatal("FinishRun should return an error when SQLite cannot open the database path")
 	}
