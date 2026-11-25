@@ -52,19 +52,22 @@ func AddUpload(rec *DatasetRecord, ds *DatasetMeta, c map[string]string, status 
 	return err
 }
 
-func BackfillUpload(rec *DatasetRecord, ds *DatasetMeta, r *CheckResult, runID int64) bool {
+func BackfillUpload(rec *DatasetRecord, ds *DatasetMeta, r *CheckResult, runID int64) (bool, error) {
 	db, err := OpenDB()
 	if err != nil {
-		return false
+		return false, err
 	}
-	var dummy int
-	if err := db.QueryRow("SELECT 1 FROM uploads WHERE rel=? AND status IN ('成功','已存在') LIMIT 1", rec.Rel).Scan(&dummy); err == nil {
-		return false
+	var exists int
+	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM uploads WHERE rel=? AND status IN ('成功','已存在'))", rec.Rel).Scan(&exists); err != nil {
+		return false, err
+	}
+	if exists != 0 {
+		return false, nil
 	}
 	if err := AddUpload(rec, ds, nil, "已存在", r.RemoteFiles, r.Revision, 0, 0, "", runID, "校验补录"); err != nil {
-		return false
+		return false, err
 	}
-	return true
+	return true, nil
 }
 
 func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string]string) {
@@ -186,8 +189,12 @@ func ProcessOne(job *Job, i int, rec *DatasetRecord, action string, c map[string
 		PL.Unlock()
 
 		CtxLog(ctx, fmt.Sprintf("   校验: %s  本地%d / 远端%d 个文件", r.Status, r.LocalFiles, r.RemoteFiles))
-		if r.Status == "一致" && BackfillUpload(rec, ds, r, ctx.RunID) {
-			CtxLog(ctx, "   已补录上传记录（远端已提交，本地原无记录）")
+		if r.Status == "一致" {
+			if added, backfillErr := BackfillUpload(rec, ds, r, ctx.RunID); backfillErr != nil {
+				CtxLog(ctx, "   ⚠ 校验结果已保存，但补录上传记录失败："+truncateStr(backfillErr.Error(), 400))
+			} else if added {
+				CtxLog(ctx, "   已补录上传记录（远端已提交，本地原无记录）")
+			}
 		}
 		return nil
 	}()
