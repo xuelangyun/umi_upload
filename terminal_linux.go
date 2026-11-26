@@ -21,12 +21,13 @@ func maybeRelaunchInTerminal() bool {
 
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "无法定位程序路径，继续直接启动：%v\n", err)
-		return false
+		reportLinuxTerminalUnavailable(fmt.Sprintf("无法定位程序路径：%v", err))
+		return true
 	}
 	exe, err = filepath.Abs(exe)
 	if err != nil {
-		return false
+		reportLinuxTerminalUnavailable(fmt.Sprintf("无法解析程序路径：%v", err))
+		return true
 	}
 
 	wd, _ := os.Getwd()
@@ -58,8 +59,29 @@ func maybeRelaunchInTerminal() bool {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "未找到可用的终端模拟器，请先打开终端并运行本程序。")
-	return false
+	reportLinuxTerminalUnavailable("未找到可用的终端模拟器。请先打开终端，再运行 umi_upload-linux-amd64。")
+	return true
+}
+
+func reportLinuxTerminalUnavailable(message string) {
+	fmt.Fprintln(os.Stderr, message)
+	commands := [][]string{
+		{"zenity", "--error", "--title=UMI 数据中心", "--text=" + message},
+		{"kdialog", "--error", message, "--title", "UMI 数据中心"},
+		{"notify-send", "--urgency=critical", "UMI 数据中心", message},
+		{"xmessage", "-center", message},
+	}
+	for _, item := range commands {
+		path, err := exec.LookPath(item[0])
+		if err != nil {
+			continue
+		}
+		cmd := exec.Command(path, item[1:]...)
+		if err := cmd.Start(); err == nil {
+			_ = cmd.Process.Release()
+			return
+		}
+	}
 }
 
 func hasLinuxTerminal() bool {
