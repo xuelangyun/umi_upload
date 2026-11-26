@@ -46,6 +46,13 @@ func main() {
 		return
 	}
 
+	// A binary opened from a graphical file manager has no terminal attached.
+	// Reopen it in the user's terminal so logs remain visible and closing that
+	// terminal also ends the foreground server process.
+	if maybeRelaunchInTerminal() {
+		return
+	}
+
 	if *dbFlag != "" {
 		umi.DBPath = *dbFlag
 	}
