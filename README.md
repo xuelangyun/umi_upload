@@ -15,6 +15,22 @@
    umi_upload.exe --port 8765 --host 127.0.0.1 --db umi_web.db --no-browser
    ```
 
+### Linux 直接启动
+
+1. 下载并解压 `umi_upload-linux-amd64.zip`。
+2. 在图形桌面中直接打开 `umi_upload-linux-amd64`：
+   - 如果当前没有终端，程序会自动打开系统可用的终端模拟器，并在终端前台运行；
+   - 终端显示启动日志和运行状态，程序退出后终端随之关闭；
+   - 关闭终端窗口或按 `Ctrl+C` 会触发正常清理，等待正在执行的任务退出并关闭 SQLite；
+   - 如果已经从终端启动，则直接在当前终端运行，不会再打开新终端。
+3. 也可以手动打开终端运行：
+   ```bash
+   chmod +x ./umi_upload-linux-amd64
+   ./umi_upload-linux-amd64
+   ```
+
+自动打开终端支持 `x-terminal-emulator`、GNOME Terminal、GNOME Console、Konsole、Xfce Terminal、MATE Terminal 和 xterm。无图形桌面时保持命令行前台启动，适合 SSH 等场景。
+
 ### 状态与数据集接口优化
 
 - `GET /api/state?light=1`：页面初始化/手动刷新使用的轻量元数据，不返回数据集列表。
