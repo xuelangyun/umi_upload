@@ -29,7 +29,7 @@
    ./umi_upload-linux-amd64
    ```
 
-自动打开终端支持 `x-terminal-emulator`、GNOME Terminal、GNOME Console、Konsole、Xfce Terminal、MATE Terminal 和 xterm。无图形桌面时保持命令行前台启动，适合 SSH 等场景。
+自动打开终端支持 `x-terminal-emulator`、GNOME Terminal、GNOME Console、Konsole、Xfce Terminal、MATE Terminal 和 xterm。图形桌面中如果找不到终端模拟器，会提示并退出，避免服务在后台无窗口运行。无图形桌面时保持命令行前台启动，适合 SSH 等场景。
 
 ### 状态与数据集接口优化
 
