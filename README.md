@@ -79,6 +79,7 @@
    - YAML 解析、4 表联立 `.xlsx` 报表生成、HTTP Range 视频流播放、UTF-16 字典序清单签名均由 Go 标准库直接实现。
 4. **业务规则与防呆红线按 sample 对齐**
    - **双格式共存与分桶隔离**：`ISuit-V3_YYYY-MM-DD-HH-MM-SS`（默认 `hw-upload`）与 `UMI_v3_YYYYMMDD_HHMMSS`（默认 `prt-huawei`）按会话目录名自动识别、分桶隔离；
+   - **MK_UMI 类型上传**：识别 `MK_UMI` / `mech_umi` 本地目录中的 UMI_v3 会话，使用 `bucket_umi`（默认 `prt-huawei`），目标路径为 `raw_data/raw_data_{yymmdd}/mech_umi/PRT_{城市}_room{房间号}/UMI_v3_{日期}_{时间}/`；上传时复用相同的文件 SHA-256、断点续传、远端对象清单核对、`manifest.json` 与 `_READY` 提交流程。
    - **严格两阶段提交**：全量数据文件上传 + 远端数量/大小核对 → 写入并回读校验 `manifest.json`（与 Python 版 `revision` 逐字节完全一致） → 最后写入并校验 `_READY`；
    - **快速校验 / 深度 SHA-256 校验 / 校验补录**：支持快速核对清单与逐文件下载比对 SHA-256，远端一致但本地无记录时自动单次补录；
    - **错放修正与视频预览**：`ISuit-V3` 自动错放检测与一键移动；`UMI_v3` 内置浏览器 `Range (206)` 多机位视频预览与 `normal ↔ calibration` 手动双向移动；
