@@ -53,3 +53,7 @@ func installPlatformHandlers() {
 	})
 	_, _, _ = proc.Call(winCtrlHandlerRef, 1)
 }
+
+func platformShutdownSignals() []os.Signal {
+	return nil
+}
