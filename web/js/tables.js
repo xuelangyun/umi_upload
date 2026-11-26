@@ -91,7 +91,7 @@ function renderFmtSeg() {
 function renderMoveBtns() {
   const {stats} = datasetOverview(), f = S.F.fmt || '';
   const selected = getSelectionStats();
-  const hasI = stats.isuit > 0 && f !== 'umi_v3', hasU = stats.umi_v3 > 0 && f !== 'isuit';
+  const hasI = stats.isuit > 0 && f !== 'umi_v3', hasU = S.D.some(r => isUmi(r) && ['normal', 'calibration'].includes(r.type)) && f !== 'isuit';
   const uN = selected.umiNormal, uC = selected.umiCalibration;
   $('mvGrp').hidden = S.view !== 1 || !(hasI || hasU); $('mvBtn').hidden = !hasI; $('umvBtn').hidden = !hasU; $('mvBackBtn').hidden = !hasU;
   $('mvBtn').textContent = 'ISuit 自动' + (stats.misplaced ? ` (${stats.misplaced})` : ''); $('umvBtn').textContent = 'UMI 移到标定' + (uN ? ` (${uN})` : ''); $('mvBackBtn').textContent = 'UMI 移回常规' + (uC ? ` (${uC})` : '');
