@@ -1,5 +1,6 @@
 /* 两张表（数据列表 / 上传记录）+ 汇总条 + 分页。draw() 是唯一入口。
    加列：在对应的 *_COLS 里加一项（表头 + 取值函数）即可，不用改别处。 */
+const typeLabel = type => ({normal: '常规', calibration: '标定', MK_UMI: 'MK_UMI'}[type] || type || '—');
 const pathCell = v => `<td class="cp" data-v="${esc(v)}" title="${esc(v)}（点击复制）">${esc(v)}</td>`;
 const remoteTag = v => !v ? '<span class="muted">—</span>' : tag(v.status + (v.deep ? '·深' : ''), cls(v.status),
   v.error || `本地${v.local_files} 远端${v.remote_files} 缺${(v.missing || []).length} 多${(v.extra || []).length} 大小差${(v.size_diff || []).length} 哈希差${(v.hash_diff || []).length} 清单差${(v.manifest_diff || []).length}｜${v.checked_at}`);
@@ -20,7 +21,7 @@ const sessCell = r => isUmi(r)      // UMI_v3：点会话名预览视频（看�
 /* 数据列表的列：[表头, 排序字段(可空), 是否右对齐, 单元格函数(r) → <td>…] */
 const DATA_COLS = [
   ['格式', 'fmt', 0, r => `<td>${fmtTag(r.fmt)}</td>`],
-  ['类型', 'type', 0, r => `<td title="${esc(r.rel)}">${r.type === 'normal' ? '常规' : '标定'}${r.misplaced ? ' ' + tag('错放', 'bad', r.misplaced) : ''}${shortCal(r) ? ' ' + tag('<3分钟', 'wn', '时长不足 3 分钟，UMI_v3 的标定会话通常很短（仅提示）。点会话名看视频：画面里有二维码 = 标定') : ''}</td>`],
+  ['类型', 'type', 0, r => `<td title="${esc(r.rel)}">${esc(typeLabel(r.type))}${r.misplaced ? ' ' + tag('错放', 'bad', r.misplaced) : ''}${shortCal(r) ? ' ' + tag('<3分钟', 'wn', '时长不足 3 分钟，UMI_v3 的标定会话通常很短（仅提示）。点会话名看视频：画面里有二维码 = 标定') : ''}</td>`],
   ['设备', 'device', 0, r => `<td class="${r.dev_diff ? 'rm-bad' : ''}" title="${esc(r.dev_diff || (isUmi(r) ? '设备文件夹名，仅作参考（UMI_v3 的设备与设备SN 没有对应关系）' : '设备文件夹名（应为设备SN 后 4 位）'))}">${esc(r.device)}</td>`],
   ['设备SN', 'device_sn', 0, r => `<td>${esc(r.device_sn)}</td>`],
   ['房间', 'room', 0, r => roomCell(r.room, r.id, r.rel, r.room_bad, r.room_diff)],
@@ -43,7 +44,7 @@ const DATA_COLS = [
 /* 上传记录的列（数据来自 /api/uploads，按「采集时间」倒序；采集日期取自 rel，目录日期≠采集日期的行整行标黄）：[表头, 是否右对齐, 单元格函数(h, 日期不一致, 采集日期)] */
 const REC_COLS = [
   ['采集时间', 0, h => `<td title="登记时间 ${esc(h.created_at)}">${esc(h.start_time)}</td>`], ['状态', 0, h => `<td>${tag(h.status, cls(h.status), h.error)}</td>`],
-  ['类型', 0, h => `<td>${h.type === 'normal' ? '常规' : '标定'}</td>`], ['格式', 0, h => `<td>${fmtTag(h.fmt)}</td>`], ['设备', 0, h => `<td>${esc(h.device)}</td>`], ['设备SN', 0, h => `<td>${esc(h.device_sn)}</td>`],
+  ['类型', 0, h => `<td>${esc(typeLabel(h.type))}</td>`], ['格式', 0, h => `<td>${fmtTag(h.fmt)}</td>`], ['设备', 0, h => `<td>${esc(h.device)}</td>`], ['设备SN', 0, h => `<td>${esc(h.device_sn)}</td>`],
   ['房间', 0, h => roomCell(h.room, '', h.rel, roomBad(h.room) ? '房间不是 3 位格式，应为 PRT_XX_room002' : '', '')],
   ['目录日期', 0, (h, dw) => `<td class="${dw ? 'dwc' : ''}" title="${dw ? '目录日期与 session 日期不一致' : ''}">${esc(h.dir_date)}</td>`],
   ['采集日期', 0, (h, dw, cp) => `<td class="${dw ? 'dwc' : ''}">${cp}</td>`],
