@@ -623,7 +623,7 @@ func Discover(routes []RouteSpec, cfg map[string]string) ([]*DatasetMeta, []stri
 					return err
 				}
 				if prevType, ok := claimed[s.Source]; ok && prevType != job.Type {
-					return NewUploadError("同一个数据集同时出现在 normal 和 calibration 文件夹里，请检查路线")
+					return NewUploadError("同一个数据集同时出现在多个上传类型目录里，请检查扫描路线")
 				}
 				claimed[s.Source] = job.Type
 
@@ -643,8 +643,12 @@ func Discover(routes []RouteSpec, cfg map[string]string) ([]*DatasetMeta, []stri
 				}
 
 				prt := fmt.Sprintf("PRT_%s_room%s", city, room)
+				subdir, ok := TypeSubdir[job.Type]
+				if !ok {
+					return NewUploadError("不支持的数据类型: %s", job.Type)
+				}
 				bucket := BucketFor(s.Fmt, cfg)
-				rawURI := fmt.Sprintf("oss://%s/raw_data/raw_data_%s/%s/%s/%s/", bucket, yymmdd, TypeSubdir[job.Type], prt, name)
+				rawURI := fmt.Sprintf("oss://%s/raw_data/raw_data_%s/%s/%s/%s/", bucket, yymmdd, subdir, prt, name)
 				if prevSrc, ok := seen[rawURI]; ok {
 					if prevSrc != s.Source {
 						return NewUploadError("不同本地目录指向同一 OSS 数据集: %s 与 %s", prevSrc, s.Source)
