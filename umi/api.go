@@ -1128,7 +1128,7 @@ func NewHandler(webFS fs.FS) http.Handler {
 			}
 		}
 		hints := []string{}
-		for _, typ := range []string{"normal", "calibration"} {
+		for _, typ := range []string{"normal", "calibration", "MK_UMI"} {
 			for _, n := range LocalDirs[typ] {
 				if st, herr := os.Stat(filepath.Join(absP, n)); herr == nil && st.IsDir() {
 					hints = append(hints, n)
