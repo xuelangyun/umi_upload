@@ -112,7 +112,9 @@ func defaultShutdownLater() {
 func InstallHandlers() {
 	installPlatformHandlers()
 	ch := make(chan os.Signal, 2)
-	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	signals := []os.Signal{os.Interrupt, syscall.SIGTERM}
+	signals = append(signals, platformShutdownSignals()...)
+	signal.Notify(ch, signals...)
 	go func() {
 		<-ch
 		Cleanup()
