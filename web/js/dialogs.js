@@ -276,7 +276,7 @@ async function openFolder(el) {
 async function openMove(el) {
   if (S.busy || S.scanning) return toast('扫描/任务进行中，暂时不能移动');
   const to = (el && el.dataset && el.dataset.to) || '';
-  if (to) return openMoveManual(S.D.filter(r => S.sel.has(r.id) && isUmi(r) && r.type !== to).map(r => r.id), to);
+  if (to) return openMoveManual(S.D.filter(r => S.sel.has(r.id) && isUmi(r) && ['normal', 'calibration'].includes(r.type) && r.type !== to).map(r => r.id), to);
   const j = await api('/api/move/plan'); if (!j.plans) return;
   S.MV = j.plans; S.moveTo = ''; renderMove(); openModal('mm');
 }
