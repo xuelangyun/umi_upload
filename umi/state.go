@@ -21,11 +21,13 @@ var TZ = time.FixedZone("CST", 8*3600)
 var LocalDirs = map[string][]string{
 	"normal":      {"umi_normal", "umi_noraml"}, // umi_noraml kept for legacy typo compatibility
 	"calibration": {"umi_calibration"},
+	"MK_UMI":      {"MK_UMI", "mech_umi"},
 }
 
 var TypeSubdir = map[string]string{
 	"normal":      "umi_normal",
 	"calibration": "umi_calibration",
+	"MK_UMI":      "mech_umi",
 }
 
 var SkipDirs = map[string]bool{
