@@ -876,7 +876,7 @@ func RunScan(opts ScanOpts, roots []string) {
 			found = FindDirs(r, 3)
 		}
 		if len(found) == 0 {
-			problems = append(problems, fmt.Sprintf("%s 下（3 层内）没有 umi_normal / umi_calibration", r))
+			problems = append(problems, fmt.Sprintf("%s 下（3 层内）没有 umi_normal / umi_calibration / MK_UMI", r))
 			continue
 		}
 		for _, fd := range found {
