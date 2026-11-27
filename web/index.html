@@ -83,7 +83,7 @@
 </div>
 
 <div class="filters-wrap"><div class="filters" id="flt">
-  <select id="ft" aria-label="数据类型筛选"><option value="">全部类型</option><option value="normal">常规</option><option value="calibration">标定</option></select><input id="fdurMin" type="number" min="0" step="0.1" inputmode="decimal" aria-label="最短时长（分钟）" placeholder="最短时长(分钟)" title="时长下限，留空表示不限" class="w110"><input id="fdurMax" type="number" min="0" step="0.1" inputmode="decimal" aria-label="最长时长（分钟）" placeholder="最长时长(分钟)" title="时长上限，留空表示不限" class="w110">
+  <select id="ft" aria-label="数据类型筛选"><option value="">全部类型</option><option value="normal">常规</option><option value="calibration">标定</option></select><input id="fdurMin" type="number" min="0" step="0.1" inputmode="decimal" aria-label="最短时长（分钟）" placeholder="最短(分)" title="时长下限，单位：分钟；留空不限" class="duration-input"><input id="fdurMax" type="number" min="0" step="0.1" inputmode="decimal" aria-label="最长时长（分钟）" placeholder="最长(分)" title="时长上限，单位：分钟；留空不限" class="duration-input">
   <select id="fs" aria-label="状态筛选"></select><select id="fd" aria-label="设备筛选"></select><select id="fe" aria-label="采集日期筛选" title="采集日期（session 目录名里的日期）"></select><select id="fo" aria-label="人员筛选"></select>
   <input id="fk" aria-label="任务名筛选" placeholder="任务名"><input id="fc" aria-label="地点筛选" placeholder="地点">
   <input id="q" aria-label="关键字筛选" placeholder="关键字（会话目录/本地路径/任务/人员/地点/设备/SN；空格分隔多个词）">

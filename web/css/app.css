@@ -71,7 +71,7 @@ select.narrow,.narrow{width:62px}.w58{width:54px}
 .tabs{display:inline-flex;gap:2px;padding:2px;background:var(--s3);border-radius:10px}
 .tabs button{border:0;background:transparent;height:28px;border-radius:8px;padding:0 14px;cursor:pointer;color:var(--mu)}.tabs button.on{background:var(--sf);color:var(--tx);font-weight:600;box-shadow:var(--sh)}
 .filters-wrap{padding:0 18px 6px;overflow-x:auto;flex:none}
-.filters{display:grid;grid-template-columns:92px 110px 110px 138px 92px 126px 124px minmax(100px,1.1fr) minmax(100px,1fr) minmax(130px,1.5fr) 62px 62px;gap:6px;align-items:center;min-width:1210px}
+.filters{display:grid;grid-template-columns:92px 76px 76px 138px 92px 126px 124px minmax(100px,1.1fr) minmax(100px,1fr) minmax(130px,1.5fr) 62px 62px;gap:6px;align-items:center;min-width:1142px}
 .filters>*{min-width:0;width:100%}
 .summary{display:flex;align-items:center;gap:12px;margin:0 18px 6px;padding:0 12px;height:34px;background:var(--sf);border:1px solid var(--ln);border-radius:var(--r);flex:none}
 .summary-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.summary-text b{color:var(--ac);font-variant-numeric:tabular-nums}
