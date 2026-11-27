@@ -40,13 +40,14 @@ function setStatusOptions() {
   const v = $('fs').value, o = STATUS_OPTIONS[S.view];
   $('fs').innerHTML = o.map(x => `<option value="${x[0]}">${x[1]}</option>`).join('');
   $('fs').value = o.some(x => x[0] === v) ? v : '';
+  $('fdur').hidden = S.view !== 1;
 }
 
 const readFilters = () => ({type: $('ft').value, status: $('fs').value, device: $('fd').value, cap_date: $('fe').value, operator: $('fo').value,
-  task: $('fk').value.trim(), location: $('fc').value.trim(), q: $('q').value.trim()});
+  duration_lt: S.view === 1 ? $('fdur').value : '', task: $('fk').value.trim(), location: $('fc').value.trim(), q: $('q').value.trim()});
 
 function query() { S.F = Object.assign(readFilters(), {fmt: S.F.fmt || ''}); S.page = 0; refresh(); }      // fmt（格式分组按钮）不在下拉里，查询时保留
-function clearFilters() { for (const id of ['ft', 'fs', 'fd', 'fe', 'fo', 'fk', 'fc', 'q']) $(id).value = ''; S.F = {fmt: ''}; query(); }
+function clearFilters() { for (const id of ['ft', 'fs', 'fd', 'fe', 'fo', 'fdur', 'fk', 'fc', 'q']) $(id).value = ''; S.F = {fmt: ''}; query(); }
 function setFmt(el) { S.F = Object.assign({}, S.F, {fmt: el.dataset.v}); S.page = 0; refresh(); }                  // 格式分组：全部 / ISuit-V3 / UMI_v3
 function refresh() { S.view === 1 ? draw() : loadRecords(); }          // 重新取/画当前页签
 
@@ -118,7 +119,7 @@ function rows() {
   const datasetKey = S.datasetETag || ('v:' + (S.datasetVersion || 0) + ':' + S.D.length);
   const filterKey = JSON.stringify([
     datasetKey, f.fmt || '', f.type || '', f.device || '', f.cap_date || '',
-    f.operator || '', f.task || '', f.location || '', f.status || '', f.q || ''
+    f.operator || '', f.duration_lt || '', f.task || '', f.location || '', f.status || '', f.q || ''
   ]);
   const sortKey = filterKey + '\u0000' + S.sortK + '\u0000' + S.sortD;
   if (S.datasetViewCache?.key === sortKey && S.datasetViewCache.data === S.D) return S.datasetViewCache.rows;
@@ -132,6 +133,7 @@ function rows() {
     if (f.device && row.device !== f.device) continue;
     if (f.cap_date && row.cap_date !== f.cap_date) continue;
     if (f.operator && row.operator !== f.operator) continue;
+    if (f.duration_lt && (!(Number(row.duration) > 0) || Number(row.duration) >= Number(f.duration_lt))) continue;
     if (task && !lcs(row.task).includes(task)) continue;
     if (location && !lcs(row.location).includes(location)) continue;
     if (f.status && !(f.status === 'mis' ? row.misplaced : f.status === 'warn' ? hasWarn(row) : row.up_state === f.status)) continue;
